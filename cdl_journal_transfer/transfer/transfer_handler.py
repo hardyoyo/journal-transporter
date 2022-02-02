@@ -1,9 +1,10 @@
 """Interface for handling journal transfers from source to target servers"""
 # cdl_journal_transfer/transfer/handler.py
 
-import asyncio, asyncssh
+import asyncio, asyncssh, json
 
 from pathlib import Path
+from cdl_journal_transfer.transfer.remote_connection import RemoteConnection
 
 class TransferHandler:
 
@@ -14,29 +15,45 @@ class TransferHandler:
         self.source = source
         self.target = target
         self.options = options
+        self.source_connection = RemoteConnection(**self.source) if source is not None else None
+        self.target_connection = RemoteConnection(**self.target) if target is not None else None
 
-    async def get_journals(self):
+
+    def get_data_dir(self, *path_segments) -> Path:
+        path = (Path(self.data_directory) / "current")
+
+        for segment in path_segments:
+            path = path / segment
+            path.mkdir(exist_ok=True)
+            index_file = (path / "index.json")
+            index_file.touch(exist_ok=True)
+
+        return path
+
+
+    async def get(self, record_name, **filters) -> None:
         if self.source is None : return
-        if not hasattr(self, "source_conn") : await self._connect_source()
 
-        result = await self.source_conn.run("ojs-cli /journals")
+        data_dir = self.get_data_dir(record_name)
+        response = await self.source_connection.run(f"ojs-cli /{record_name}")
 
-        journal_dir = (Path(self.data_directory) / "current" / "journals")
-        journal_dir.mkdir(exist_ok=True)
-        index_file = (journal_dir / "index.json")
-        index_file.touch(exist_ok=True)
+        with open(data_dir / "index.json", "w") as f:
+            f.write(json.dumps(response, indent=2))
 
-        with open(index_file, "w") as f:
-            f.write(result.stdout)
 
-    async def _connect_source(self):
-        self.source_conn = await asyncssh.connect(self.source["host"], **self._connection_options_for(self.source))
+    async def put(self, record_name, json) -> None:
+        if self.target is None : return
 
-    async def _connect_target(self):
-        self.target_conn = await asyncssh.connect(self.source["host"], **self._connection_options_for(self.target))
+        data_dir = self.get_data_dir(record_name)
+        data = json.loads(path / "index.json")
+        temp_file = f"/tmp/cdl-jt/{record_name}.json"
 
-    def _connection_options_for(self, server_def):
-        unfiltered = { key: server_def[key] for key in self.SERVER_OPTION_KEYS }
-        filtered = { k:v for k,v in unfiltered.items() if v is not None }
-        if filtered["port"] is not None : filtered["port"] = int(filtered["port"])
-        return filtered
+        self.target_connection.run_commands([
+            f"echo {json.dumps(data)} >| {temp_file}",
+            f"cdl-jt-plugin {tmp_file}"
+        ])
+
+    ## Convenience methods
+
+    async def get_journals(self) -> None:
+        await self.get("journals")

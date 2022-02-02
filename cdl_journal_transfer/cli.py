@@ -3,12 +3,17 @@
 
 from pathlib import Path
 from typing import Optional
+from enum import Enum
 import getpass
 
 import typer
 
 from cdl_journal_transfer import __app_name__, __version__, ERRORS, config, database
 from cdl_journal_transfer.transfer.transfer_handler import TransferHandler
+
+class ServerType(str, Enum):
+    remote = "remote"
+    local = "local"
 
 app = typer.Typer()
 state = { "verbose": False, "test": False }
@@ -144,7 +149,7 @@ def define_server(
         help="Name of the server to create or update"
     ),
     host: str = typer.Option(
-        ...,
+        None,
         "--host",
         "-h",
         help="The server's URL or hostname that can be used to access it from this machine"
