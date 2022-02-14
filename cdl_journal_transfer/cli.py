@@ -11,9 +11,9 @@ import typer
 from cdl_journal_transfer import __app_name__, __version__, ERRORS, config, database
 from cdl_journal_transfer.transfer.transfer_handler import TransferHandler
 
-class ServerType(str, Enum):
-    remote = "remote"
-    local = "local"
+class ConnectionType(str, Enum):
+    ssh = "ssh"
+    http = "http"
 
 app = typer.Typer()
 state = { "verbose": False, "test": False }
@@ -141,8 +141,7 @@ def configure(
         database.create()
 
 
-@app.command("create-server")
-@app.command("update-server")
+@app.command()
 def define_server(
     name: str = typer.Argument(
         ...,
@@ -154,22 +153,28 @@ def define_server(
         "-h",
         help="The server's URL or hostname that can be used to access it from this machine"
     ),
+    type: Optional[ConnectionType] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Method that should be used to connect to the server"
+    ),
     username: Optional[str] = typer.Option(
         None,
         "--user",
         "-u",
-        help="SSH username"
+        help="Username of a user authorized to access the information"
     ),
     password: Optional[str] = typer.Option(
         None,
         "--password",
         "-p",
-        help="SSH password (not needed if using key-based auth)"
+        help="Password of a user authorized to access the information"
     ),
     port: Optional[int] = typer.Option(
         None,
         "--port",
-        help="The port to which the SSH client should attempt to connect"
+        help="The port to which the client should connect"
     )
 ) -> None:
     """
@@ -178,6 +183,7 @@ def define_server(
     If NAME already exists in the config (case sensitive), this command
     will update that server rather than creating a new one.
     """
+    type = type.value
     result = config.define_server(**locals())
     if ERRORS.get(result, False):
         typer.secho(f'ERROR: An error occurred: {ERRORS[result]}', fg=typer.colors.RED)
@@ -185,6 +191,7 @@ def define_server(
         typer.secho("Server configuration saved", fg=typer.colors.BLACK, bg=typer.colors.GREEN)
         if verbose():
             typer.echo(f'\nName: {name}')
+            typer.echo(f'Type: {connection_type}')
             typer.echo(f'Host: {host}')
             if username : typer.echo(f'User: {username}')
             if password : typer.echo(f'Password: {password}')
@@ -236,10 +243,12 @@ def get_servers() -> None:
 
     for index, server_def in enumerate(defined_servers):
         typer.secho(f'\n#{index + 1}', bold=True)
-        typer.secho(f'Name: {server_def["name"]}')
-        typer.secho(f'Host: {server_def["host"]}')
-        typer.secho(f'Username: {server_def["username"] or ""}')
-        typer.secho(f'Password: {"*****" if server_def["password"] else ""}')
+        for index, key in enumerate(server_def):
+            value = server_def[key]
+            if key == "password":
+                value = "*****" if value else ""
+
+            typer.secho(f"{key.capitalize()}: {value}")
 
 @app.command()
 def get_config() -> None:

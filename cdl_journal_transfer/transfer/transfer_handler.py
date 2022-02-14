@@ -4,7 +4,10 @@
 import asyncio, asyncssh, json
 
 from pathlib import Path
-from cdl_journal_transfer.transfer.remote_connection import RemoteConnection
+
+from cdl_journal_transfer.transfer.http_connection import HTTPConnection
+from cdl_journal_transfer.transfer.ssh_connection import SSHConnection
+
 
 class TransferHandler:
 
@@ -15,8 +18,8 @@ class TransferHandler:
         self.source = source
         self.target = target
         self.options = options
-        self.source_connection = RemoteConnection(**self.source) if source is not None else None
-        self.target_connection = RemoteConnection(**self.target) if target is not None else None
+        self.source_connection = self.connection_class(source)(**self.source) if source is not None else None
+        self.target_connection = self.connection_class(target)(**self.target) if target is not None else None
 
 
     def get_data_dir(self, *path_segments) -> Path:
@@ -35,7 +38,7 @@ class TransferHandler:
         if self.source is None : return
 
         data_dir = self.get_data_dir(record_name)
-        response = await self.source_connection.run(f"ojs-cli /{record_name}")
+        response = await self.source_connection.run_command(record_name)
 
         with open(data_dir / "index.json", "w") as f:
             f.write(json.dumps(response, indent=2))
@@ -52,6 +55,14 @@ class TransferHandler:
             f"echo {json.dumps(data)} >| {temp_file}",
             f"cdl-jt-plugin {tmp_file}"
         ])
+
+
+    def connection_class(self, server_def):
+        if server_def["type"] == "ssh":
+            return SSHConnection
+        elif server_def["type"] == "http":
+            return HTTPConnection
+
 
     ## Convenience methods
 

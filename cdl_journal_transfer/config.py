@@ -90,6 +90,7 @@ def get_servers() -> list:
 
             ret.append({
                 "name": section_name,
+                "type": section.get("type"),
                 "host": section.get("host"),
                 "username": section.get("username"),
                 "password": section.get("password")

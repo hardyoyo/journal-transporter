@@ -1,12 +1,11 @@
 import asyncio, asyncssh, json
 
-class RemoteConnection:
+from cdl_journal_transfer.transfer.abstract_connection import AbstractConnection
 
-    def __init__(self, **options):
-        self.host = options["host"]
-        self.username = options["username"]
-        self.password = options["password"]
-        self.port = int(options["port"]) if options["port"] is not None else None
+class SSHConnection(AbstractConnection):
+
+    def setup():
+        self.port = int(self.options["port"]) if self.options["port"] is not None else None
 
 
     async def create_connection(self):
@@ -26,6 +25,7 @@ class RemoteConnection:
                 process.stdin.write(op + '\n')
                 result = await process.stdout.readline()
                 print(op, '=', result, end='')
+
 
     def _connection_options(self):
         opts = {
