@@ -38,7 +38,7 @@ class TransferHandler:
         if self.source is None : return
 
         data_dir = self.get_data_dir(record_name)
-        response = await self.source_connection.run_command(record_name)
+        response = await self.source_connection.get_data(record_name)
 
         with open(data_dir / "index.json", "w") as f:
             f.write(json.dumps(response, indent=2))

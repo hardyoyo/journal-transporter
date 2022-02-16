@@ -154,7 +154,7 @@ def define_server(
         help="The server's URL or hostname that can be used to access it from this machine"
     ),
     type: Optional[ConnectionType] = typer.Option(
-        None,
+        ConnectionType.http,
         "--type",
         "-t",
         help="Method that should be used to connect to the server"
@@ -263,7 +263,7 @@ def get_config() -> None:
         typer.secho(f'{styled_key}: {value}')
 
 @app.async_command()
-async def fetch_source_data(
+async def fetch_data(
     data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
     source: Optional[str] = opt_source(default = config.get("default_source")),
     keep: Optional[bool] = opt_keep(default = config.get("keep")),
@@ -285,7 +285,7 @@ async def fetch_source_data(
     result = await handler.get_journals()
 
 @app.async_command()
-async def transfer_target_data(
+async def transfer_data(
     data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
     target: Optional[str] = opt_target(default = config.get("default_target"))
 ) -> None:
@@ -300,7 +300,7 @@ async def transfer_target_data(
     if len(errors) > 0:
         typer.secho("\n".join(errors), fg=typer.colors.RED)
         raise typer.Exit(1)
-        
+
     handler = TransferHandler(config.get("data_directory"), target=target_def)
     result = await handler.put_journals()
 
