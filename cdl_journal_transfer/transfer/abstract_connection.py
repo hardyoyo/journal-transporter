@@ -14,6 +14,5 @@ class AbstractConnection(ABC):
     def setup(self):
         pass
 
-    @abstractmethod
     def run_command(self, command):
         pass

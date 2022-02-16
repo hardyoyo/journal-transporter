@@ -281,16 +281,16 @@ async def fetch_source_data(
         typer.secho("\n".join(errors), fg=typer.colors.RED)
         raise typer.Exit(1)
 
-    handler = TransferHandler(config.get("data_directory"), source_def)
+    handler = TransferHandler(config.get("data_directory"), source=source_def)
     result = await handler.get_journals()
 
-@app.command()
-def transfer_target_data(
+@app.async_command()
+async def transfer_target_data(
     data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
     target: Optional[str] = opt_target(default = config.get("default_target"))
 ) -> None:
     """
-    WIP!! Puts most recently imported journal data and transfers it to a source server.
+    Puts most recently imported journal data and transfers it to a source server.
     """
     errors = []
     target_def = config.get_server(target)
@@ -300,9 +300,12 @@ def transfer_target_data(
     if len(errors) > 0:
         typer.secho("\n".join(errors), fg=typer.colors.RED)
         raise typer.Exit(1)
+        
+    handler = TransferHandler(config.get("data_directory"), target=target_def)
+    result = await handler.put_journals()
 
-@app.command()
-def transfer(
+@app.async_command()
+async def transfer(
     data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
     source: Optional[str] = opt_source(default = config.get("default_source")),
     target: Optional[str] = opt_target(default = config.get("default_target")),

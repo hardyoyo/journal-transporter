@@ -44,17 +44,15 @@ class TransferHandler:
             f.write(json.dumps(response, indent=2))
 
 
-    async def put(self, record_name, json) -> None:
+    async def put(self, record_name, data=None) -> None:
         if self.target is None : return
 
-        data_dir = self.get_data_dir(record_name)
-        data = json.loads(path / "index.json")
-        temp_file = f"/tmp/cdl-jt/{record_name}.json"
+        if data is None:
+            data_dir = self.get_data_dir(record_name)
+            with open(data_dir / "index.json") as f:
+                data = json.loads(f.read())
 
-        self.target_connection.run_commands([
-            f"echo {json.dumps(data)} >| {temp_file}",
-            f"cdl-jt-plugin {tmp_file}"
-        ])
+        response = await self.target_connection.put_data("journals", data)
 
 
     def connection_class(self, server_def):
@@ -68,3 +66,7 @@ class TransferHandler:
 
     async def get_journals(self) -> None:
         await self.get("journals")
+
+
+    async def put_journals(self) -> None:
+        await self.put("journals")
