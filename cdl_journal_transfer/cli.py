@@ -1,15 +1,30 @@
-"""This module provides the CDL Journal Transfer CLI app"""
+"""
+This module provides the CDL Journal Transfer CLI app.
+
+Color standards:
+- White foreground: standard
+- Yellow foreground: attention / prompt
+- Blue foreground: syntax highlighting
+- Magenta foreground: verbose info
+- Green foreground: success
+- Red foreground: warning / non-fatal error
+
+- Blue background: header
+- Green background: great success
+- Red background: fatal error
+"""
 # cdl_journal_transfer/cli.py
 
 from pathlib import Path
 from typing import Optional
 from enum import Enum
-import getpass
+from typing import List
 
-import typer
+import typer, asyncio
 
 from cdl_journal_transfer import __app_name__, __version__, ERRORS, config, database
 from cdl_journal_transfer.transfer.transfer_handler import TransferHandler
+from cdl_journal_transfer.progress.cli_progress_reporter import CliProgressReporter
 
 class ConnectionType(str, Enum):
     ssh = "ssh"
@@ -18,7 +33,9 @@ class ConnectionType(str, Enum):
 app = typer.Typer()
 state = { "verbose": False, "test": False }
 
+
 # CLI options
+
 def build_option(required: bool = False, default = None, tag: str = "", shortcut: str = None, help: str = None, **opts):
     # Remove Nones from tags
     args = list(filter(None, [tag, shortcut]))
@@ -30,6 +47,7 @@ def build_option(required: bool = False, default = None, tag: str = "", shortcut
         **opts
     )
 
+
 def opt_data_directory(required: bool = False, default: Path = Path(typer.get_app_dir(__app_name__))):
     return build_option(
         required,
@@ -38,6 +56,7 @@ def opt_data_directory(required: bool = False, default: Path = Path(typer.get_ap
         "--d",
         "Path to data directory location"
     )
+
 
 def opt_source(required: bool = False, default: str = None, help: str = "Name of an already-defined source server to use (see define-server)"):
     return build_option(
@@ -48,6 +67,7 @@ def opt_source(required: bool = False, default: str = None, help: str = "Name of
         help
     )
 
+
 def opt_target(required: bool = False, default: str = None, help: str = "Name of an already-defined target server to use (see define-server)"):
     return build_option(
         required,
@@ -56,6 +76,7 @@ def opt_target(required: bool = False, default: str = None, help: str = "Name of
         "-t",
         help
     )
+
 
 def opt_keep(default: bool = None):
     return build_option(
@@ -66,6 +87,7 @@ def opt_keep(default: bool = None):
         "Should the dataset from this transfer be kept? This could use a lot of disk space"
     )
 
+
 def opt_keep_max(default: int = None):
     return build_option(
         False,
@@ -75,13 +97,61 @@ def opt_keep_max(default: int = None):
         "If --keep is true, how many transfers should be kept? Older transfer will be discarded."
     )
 
-def verbose() -> bool:
-    return state["verbose"]
 
-def test() -> bool:
+def verbose() -> bool:
+    return state["verbose"] or config.verbose()
+
+
+def is_test() -> bool:
     return state["test"]
 
-# Commands
+
+def color(type):
+    if type == "attention":
+        return { "fg":  typer.colors.YELLOW }
+    elif type == "info":
+        return { "fg":  typer.colors.MAGENTA }
+    elif type == "warning":
+        return { "fg":  typer.colors.RED }
+    elif type == "success":
+        return { "fg":  typer.colors.GREEN }
+    elif type == "highlight":
+        return { "fg": typer.colors.BRIGHT_BLUE}
+    elif type == "header":
+        return { "fg": typer.colors.WHITE, "bg": typer.colors.BLUE }
+    elif type == "error":
+        return { "fg": typer.colors.BLACK, "bg": typer.colors.RED }
+    elif type == "great_success":
+        return { "fg": typer.colors.BLACK, "bg": typer.colors.GREEN }
+    else:
+        return { "fg": typer.colors.WHITE }
+
+
+def write(text, theme=None, line_break=False, **options):
+    if line_break in (True, "before") : write_line_break()
+    typer.secho(f"    {text}", **color(theme), **options)
+    if line_break in (True, "after") : write_line_break()
+
+
+def verbose_write(text, line_break=False, theme="info", **options):
+    if verbose() : write(text, theme, line_break, **options)
+
+
+def write_line_break():
+    write("")
+
+
+def abort_if_errors(errors):
+    error_count = len(errors)
+    if error_count > 0:
+        write(f"{error_count} {'errors have' if error_count > 1 else 'error has'} occurred:", "error")
+        for error in errors:
+            write(error, "warning")
+        raise typer.Exit(1)
+
+
+## Commands
+
 @app.command()
 def init(
     data_directory: Optional[str] = opt_data_directory()
@@ -93,52 +163,68 @@ def init(
     It creates the data directory and config file, so is required before
     any other configuration.
     """
-    data_dir = config.TEST_CONFIG_DIR_PATH if test() else Path(data_directory)
+    write("Initializing CDL Journal Portability Command Line App...", "header", "after")
+    data_dir = config.TEST_CONFIG_DIR_PATH if is_test() else Path(data_directory)
     data_dir.mkdir(exist_ok=True)
 
     config_init_error = config.create(data_dir)
     if config_init_error:
-        typer.secho(
-            f'ERROR: Creating config file failed with "{ERRORS[config_init_error]}"',
-            fg = typer.colors.RED
-        )
+        write(f'ERROR: Creating config file failed with "{ERRORS[config_init_error]}"', "error")
         raise typer.Exit(1)
-    if verbose() : typer.secho("Config file: Success!", fg=typer.colors.GREEN)
+    verbose_write("Config file: Success!", "info")
 
     db_init_error = database.create()
     if db_init_error:
-        typer.secho(
-            f'ERROR: Creating database failed with "{ERRORS[db_init_error]}"',
-            fg=typer.colors.RED
-        )
+        write(f'ERROR: Creating database failed with "{ERRORS[db_init_error]}"', "error")
         raise typer.Exit(1)
     else:
-        if verbose() : typer.secho("Data directory: Success!", fg=typer.colors.GREEN)
-        typer.secho("\nApplication initialized!", fg=typer.colors.GREEN)
-        typer.echo("\nYou can now configure the application with configure and/or define-server.\nUse flag --help for more info.\n")
+        verbose_write("Data directory: Success!", "info")
+        write("\N{party popper} Application initialized! \N{party popper}", "great_success", True)
+        write("You can now configure the application with configure and/or define-server.")
+        write("Use flag --help for more info.\n")
+
 
 @app.command()
 def configure(
-    data_directory: Optional[str] = opt_data_directory(default=None),
-    default_source: Optional[str] = opt_source(
+    data_directory: Optional[str] = typer.Option(
+        None,
+        "--data-directory",
+        "-d",
+        help="Path to data directory location"
+    ),
+    default_source: Optional[str] = typer.Option(
+        None,
+        "--default-source",
+        "--s",
         help="Name of an already-defined source server to use by default (see define-server)"
     ),
-    default_target: Optional[str] = opt_target(
+    default_target: Optional[str] = typer.Option(
+        None,
+        "--default-target",
+        "--t",
         help="Name of an already-defined target server to use by default (see define-server)"
     ),
     keep: Optional[bool] = opt_keep(),
-    keep_max: Optional[int] = opt_keep_max()
+    keep_max: Optional[int] = opt_keep_max(),
+    verbose: Optional[bool] = typer.Option(
+        None,
+        "--verbose / --succinct",
+        "-v / -V",
+        help="Verbose output by default"
+    )
 ) -> None:
     """
     Apply configuration options.
 
     These options will be used as default values for initiate-transfer, unless different options are provided
     """
-    typer.secho("Applying options", bg=typer.colors.BLUE) if verbose() else None
+    verbose_write("Applying options...")
     config.apply_options(**locals())
 
     if data_directory is not None:
         database.create()
+
+    write("Success!", "success")
 
 
 @app.command()
@@ -183,23 +269,32 @@ def define_server(
     If NAME already exists in the config (case sensitive), this command
     will update that server rather than creating a new one.
     """
+    existing = config.get_server(name)
+
+    if existing:
+        verbose_write(f"A server named '{name}' already exists. Updating...", "after")
+    else:
+        verbose_write(f"Creating new server '{name}'...", "after")
+
     type = type.value
     result = config.define_server(**locals())
     if ERRORS.get(result, False):
-        typer.secho(f'ERROR: An error occurred: {ERRORS[result]}', fg=typer.colors.RED)
+        write(f'ERROR: An error occurred: {ERRORS[result]}', "error")
     else:
-        typer.secho("Server configuration saved", fg=typer.colors.BLACK, bg=typer.colors.GREEN)
-        if verbose():
-            typer.echo(f'\nName: {name}')
-            typer.echo(f'Type: {connection_type}')
-            typer.echo(f'Host: {host}')
-            if username : typer.echo(f'User: {username}')
-            if password : typer.echo(f'Password: {password}')
+        verbose_write(f'Name: {name}')
+        verbose_write(f'Type: {type}')
+        verbose_write(f'Host: {host}')
+        if username : verbose_write(f'User: {username}')
+        if password : verbose_write(f'Password: {password}')
 
-            typer.secho(
-                f'\nYou can reference this server by passing its name ({name}) as the ' +
-                f'--source or --destination options of a relevant command.'
-            )
+        verbose_write(
+            f'You can reference this server by passing its name ({name}) as the ' +
+            f'--source or --destination options of a relevant command.',
+            line_break="before"
+        )
+
+        write("Server configuration saved!", "success", "before")
+
 
 @app.command()
 def delete_server(
@@ -220,35 +315,48 @@ def delete_server(
     cfg = config.get_config()
     if cfg.has_section(name):
         if not force:
-            dewit = typer.prompt("Are you sure? (y/n)")
-            if not dewit == "y":
-                typer.secho("Aborted!", fg=typer.colors.MAGENTA)
-                raise typer.Exit(0)
+            text = typer.style(f"Are you sure you want to delete the server named {name}?", **color("attention"))
+            typer.confirm(text, abort=True)
 
         cfg.remove_section(name)
         config._write_config(cfg)
-        typer.secho(f"Server '{name}' deleted.", fg=typer.colors.YELLOW)
+        write(f"Server '{name}' deleted.", "success")
     else:
-        typer.secho(f"ERROR: Server with name '{name}' not found", fg=typer.colors.RED)
+        write(f"ERROR: Server with name '{name}' not found", "warning")
+
 
 @app.command()
-def get_servers() -> None:
+def get_server(
+    name: str = typer.Argument(
+        None,
+        help="The name of the server you wish to display. Lists all if not provided."
+    )
+) -> None:
     """
-    Displays all configured servers that can be referenced as sources or targets for transfer.
+    Displays a server definition, or all server definitions if no argument is provided.
     """
-    defined_servers = config.get_servers()
-    server_count = len(defined_servers)
+    get_named = bool(name)
 
-    typer.secho(f'Listing {server_count} server {"entry" if server_count == 1 else "entries"}:', bg=typer.colors.BLUE)
+    if get_named:
+        verbose_write(f"Fetching server named '{name}'...", line_break="after")
+    else:
+        verbose_write("Fetching all servers...")
 
-    for index, server_def in enumerate(defined_servers):
-        typer.secho(f'\n#{index + 1}', bold=True)
-        for index, key in enumerate(server_def):
-            value = server_def[key]
-            if key == "password":
-                value = "*****" if value else ""
+    server_list = list(filter(None, [config.get_server(name)])) if get_named else config.get_servers()
 
-            typer.secho(f"{key.capitalize()}: {value}")
+    if len(server_list) > 0:
+        for index, server_def in enumerate(server_list):
+            if not get_named : write(f'#{index + 1}', line_break="before", bold=True)
+
+            for _i, key in enumerate(server_def):
+                value = server_def[key]
+                if key == "password":
+                    value = "*****" if value else ""
+
+                write(f"{key.capitalize()}: {value}")
+    else:
+        write(f"ERROR: No server definition{f' found with name {name}' if get_named else 's found'}", "warning")
+
 
 @app.command()
 def get_config() -> None:
@@ -259,61 +367,33 @@ def get_config() -> None:
 
     for key in cfg:
         value = cfg[key]
-        styled_key = typer.style(key, fg=typer.colors.MAGENTA)
-        typer.secho(f'{styled_key}: {value}')
+        styled_key = typer.style(key, **color("highlight"))
+        write(f'{styled_key}: {value}')
 
-@app.async_command()
-async def fetch_data(
-    data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
-    source: Optional[str] = opt_source(default = config.get("default_source")),
-    keep: Optional[bool] = opt_keep(default = config.get("keep")),
-    keep_max: Optional[int] = opt_keep_max(default = config.get("keep_max"))
-) -> None:
-    """
-    Fetches journal data from a source server and stores it in the data directory.
-    """
-    errors = []
-    source_def = config.get_server(source)
-
-    if source_def == None : errors.append(f'Source server "{source}" is not defined')
-
-    if len(errors) > 0:
-        typer.secho("\n".join(errors), fg=typer.colors.RED)
-        raise typer.Exit(1)
-
-    handler = TransferHandler(config.get("data_directory"), source=source_def)
-    result = await handler.get_journals()
-
-@app.async_command()
-async def transfer_data(
-    data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
-    target: Optional[str] = opt_target(default = config.get("default_target"))
-) -> None:
-    """
-    Puts most recently imported journal data and transfers it to a source server.
-    """
-    errors = []
-    target_def = config.get_server(target)
-
-    if target_def == None : errors.append(f'Target server "{target}" is not defined')
-
-    if len(errors) > 0:
-        typer.secho("\n".join(errors), fg=typer.colors.RED)
-        raise typer.Exit(1)
-
-    handler = TransferHandler(config.get("data_directory"), target=target_def)
-    result = await handler.put_journals()
 
 @app.async_command()
 async def transfer(
-    data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
+    journals: List[Path] = typer.Argument(
+        None,
+        help="Any number of journal key names (also known as 'paths' or 'codes') that are to be transferred"
+    ),
     source: Optional[str] = opt_source(default = config.get("default_source")),
     target: Optional[str] = opt_target(default = config.get("default_target")),
-    keep: Optional[bool] = opt_keep(default = config.get("keep")),
-    keep_max: Optional[int] = opt_keep_max(default = config.get("keep_max"))
+    fetch_only: Optional[bool] = typer.Option(
+        False,
+        "--fetch-only",
+        help="If true, only fetch data and do not transfer to target server."
+    ),
+    put_only: Optional[bool] = typer.Option(
+        False,
+        "--put-only",
+        help="If true, only take currently-stored data and transfer to target server. Do not fetch new data."
+    ),
+    data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
+    keep: Optional[bool] = opt_keep(default = config.get("keep"))
 ) -> None:
     """
-    WIP!! Initiates a transfer.
+    Initiates a transfer of data from a source server to a target server.
     Where the sausage gets made.
     The real meal deal.
     Where the deals get sausaged.
@@ -323,14 +403,31 @@ async def transfer(
     source_def = config.get_server(source)
     target_def = config.get_server(target)
 
-    if source_def == None : errors.append(f'Source server "{source}" is not defined')
-    if target_def == None : errors.append(f'Target server "{target}" is not defined')
+    if source_def == None and not put_only:
+        errors.append(f'Source server {f"{source} is not defined" if source is not None else "is required"}')
+    if target_def == None and not fetch_only:
+        errors.append(f'Target server {f"{target} is not defined" if target is not None else "is required"}')
 
-    if len(errors) > 0:
-        typer.secho("\n".join(errors), fg=typer.colors.RED)
-        raise typer.Exit(1)
+    if fetch_only and put_only:
+        errors.append(f"--fetch-only and --put-only are both set. If you'd like to do a full transfer, leave both flags unset")
 
-    typer.echo("We did it! (or, at least, we're going to pretend like we did)")
+    abort_if_errors(errors)
+
+    if journals is None or not len(journals):
+        text = typer.style(f"You are about to import ALL journals from {source}. Are you sure?", **color("attention"))
+        typer.confirm(text, abort=True)
+
+    write(f"You are about to transfer {len(journals)} from server {source} to {target}.")
+
+    with typer.progressbar(length=100) as progress:
+        progress_reporter = CliProgressReporter(progress)
+
+        database.prepare(keep)
+        handler = TransferHandler(data_directory, source=source_def, target=target_def, progress_reporter=progress_reporter)
+        method_name = "fetch_data" if fetch_only else ("put" if put_only else "transfer")
+        method = getattr(handler, method_name)
+        method(journals, progress_reporter)
+
 
 # Callbacks
 def _version_callback(value: bool) -> None:
@@ -339,9 +436,11 @@ def _version_callback(value: bool) -> None:
         typer.echo(output)
         raise typer.Exit()
 
+
 def _verbose_callback(value: bool) -> None:
     if value:
         state["verbose"] = True
+
 
 def _test_callback(value: bool) -> None:
     """
@@ -349,6 +448,7 @@ def _test_callback(value: bool) -> None:
     """
     if value:
         state["test"] = True
+
 
 # Must come after all callback definitions
 @app.callback()

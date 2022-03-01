@@ -1,13 +1,13 @@
 """This module provides access to the data directory"""
 # cdl_journal_transfer/database.py
 
-import configparser
+import configparser, shutil, os
 from pathlib import Path
-import shutil
 
 import typer
 
 from cdl_journal_transfer import WRITE_ERROR, SUCCESS, __app_name__, config, cli
+
 
 def get_database_path() -> Path:
     """Return the current path to the data directory"""
@@ -18,21 +18,47 @@ def create() -> int:
     db_path = Path(get_database_path())
 
     try:
-        styled_data_dir = typer.style(str(db_path), fg=typer.colors.YELLOW)
-        if cli.verbose() : typer.secho(f'Creating data directory at {styled_data_dir}')
+        cli.write_verbose(f'Creating data directory at {str(db_path)}')
 
         db_path.mkdir(exist_ok=True)
         (db_path / "data").mkdir(exist_ok=True)
 
-        # Remove the "current" directory and remake it
-        current_dir = db_path / "current"
-        if current_dir.is_symlink():
-            current_dir.unlink()
-        elif current_dir.is_dir():
-            shutil.rmtree(current_dir)
-
-        current_dir.mkdir()
-
         return SUCCESS
     except OSError:
         return WRITE_ERROR
+
+
+def prepare(keep=None):
+    keep = config.get("keep") if keep is None else keep
+
+    base = Path(get_database_path())
+    current = base / "current"
+    if current.exists():
+        current.unlink() if current.is_symlink() else shutil.rmtree(current)
+
+    if keep:
+        real = base / datetime.strftime("%Y-%m-%dT%H:%M:%S")
+        real.mkdir()
+        os.symlink(real, current)
+
+        enforce_keep_limit()
+    else:
+        current.mkdir()
+
+
+def enforce_keep_limit():
+    limit = config.get("keep_limit")
+    if not limit : return
+
+
+    base = Path(get_database_path())
+    dir_names = []
+
+    for path in base.iterdir():
+        if path.is_dir() and path.name != "current":
+            dir_names.append(path.name)
+
+    if len(dir_names) > limit:
+        doomed_name = sorted(dir_names)[-1]
+        doomed_dir = base / doomed_name
+        if doomed_dir.exists() : doomed_dir.unlink()

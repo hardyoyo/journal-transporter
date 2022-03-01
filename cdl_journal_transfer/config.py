@@ -25,21 +25,17 @@ TEST_CONFIG_FILE_PATH = TEST_CONFIG_DIR_PATH / "config.ini"
 
 CONFIG_SECTION = "config"
 
+
 def get(key: str) -> str:
     try:
         return get_config().get(CONFIG_SECTION, key)
     except (NoOptionError, NoSectionError):
         return None
 
-def get_server(server_name) -> dict:
-    try:
-        return get_config()[server_name]
-    except KeyError:
-        return None
 
 def create(data_dir: Path) -> int:
     """Create the config file"""
-    if cli.verbose() : typer.secho(f'Creating config file...')
+    cli.verbose_write('Creating config file...')
 
     try:
         _config_path().touch(exist_ok=True)
@@ -51,6 +47,7 @@ def create(data_dir: Path) -> int:
 
     return SUCCESS
 
+
 def apply_options(**options) -> int:
     """Apply an arbitrary collection of key/value pairs to the config file"""
     cfg = get_config()
@@ -59,10 +56,11 @@ def apply_options(**options) -> int:
         transformed_value = _transform_config_value(value)
         if transformed_value is None:
             continue
-        if cli.verbose() : typer.echo(f'Applying config value "{key}" as "{transformed_value}"')
+        cli.verbose_write(f'Applying config value "{key}" as "{transformed_value}"')
         cfg[CONFIG_SECTION][key] = transformed_value
 
     return _write_config(cfg)
+
 
 def define_server(**server_info) -> int:
     """Saves a server configuration to config"""
@@ -78,7 +76,18 @@ def define_server(**server_info) -> int:
 
     return _write_config(cfg)
 
+
+def get_server(server_name) -> dict:
+    """Gets a single server definition dict from config, if it exists"""
+    try:
+        server_def = get_config()[server_name]
+        return { "name": server_name, **server_def }
+    except KeyError:
+        return None
+
+
 def get_servers() -> list:
+    """Gets a list of all server definition dicts from config"""
     cfg = get_config()
     ret = []
 
@@ -86,16 +95,18 @@ def get_servers() -> list:
         if section_name == CONFIG_SECTION:
             continue
         else:
-            section = cfg[section_name]
+            ret.append(get_server(section_name))
 
-            ret.append({
-                "name": section_name,
-                "type": section.get("type"),
-                "host": section.get("host"),
-                "username": section.get("username"),
-                "password": section.get("password")
-            })
-    return ret
+    return list(filter(None, ret))
+
+
+def verbose() -> bool:
+    """Gets verbose config setting"""
+    try:
+        return bool(main_config()["verbose"])
+    except KeyError:
+        return False
+
 
 def get_config() -> ConfigParser:
     """Fetches the current application config"""
@@ -103,16 +114,27 @@ def get_config() -> ConfigParser:
     cfg.read(_config_path())
     return cfg
 
+
+def main_config() -> list:
+    """
+    Gets the main config section
+    """
+    return get_config()[CONFIG_SECTION]
+
+
 def new_config() -> ConfigParser:
     """Builds a new, empty ConfigParser"""
     return ConfigParser(allow_no_value=True)
 
+
 def _config_path() -> Path:
-    return TEST_CONFIG_FILE_PATH if cli.test() else CONFIG_FILE_PATH
+    return TEST_CONFIG_FILE_PATH if cli.is_test() else CONFIG_FILE_PATH
+
 
 def _transform_config_value(value: str) -> str:
     """Transforms config values, as needed"""
     return (str(value) if value is not None else None)
+
 
 def _init_config_file(data_dir: Path) -> int:
     """
@@ -130,12 +152,14 @@ def _init_config_file(data_dir: Path) -> int:
 
     return SUCCESS
 
+
 def _write_config_value(key, value, section=CONFIG_SECTION) -> int:
     """Writes a single value to the config"""
     config_parser = get_config()
     config_parser[section][key] = value
 
     return _write_config(config_parser)
+
 
 def _write_config(config_parser) -> int:
     """Writes the contents of a ConfigParser to the disk"""
