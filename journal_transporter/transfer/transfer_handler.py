@@ -114,6 +114,11 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                                 "handler": "_push_files"
                             }
                         },
+                        "revision_requests": {
+                            "foreign_keys": {
+                                "editor": "users"
+                            }
+                        },
                         "rounds": {
                             "children": {
                                 "assignments": {
@@ -132,6 +137,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                                                 "handler": "_extract_from_index"
                                             },
                                             "push": {
+                                                # Get form element FKs
                                                 "preprocessor": "_preprocess_assignment_responses"
                                             }
                                         }
@@ -180,7 +186,11 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
 
     def initialize_data_directory(self) -> None:
-        """Creates or parses transfer metadata file."""
+        """
+        Creates or parses transfer metadata file.
+
+        This file contains details about the transfer process, including timestamps and versions.
+        """
         self.metadata_file = self.data_directory / "index.json"
         if self.metadata_file.exists():
             self.uuid = uuid.UUID(self.__load_file_data(self.metadata_file).get("transaction_id"))
@@ -315,7 +325,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
     ## CONNECTION HANDLING
     ############################
 
-    def _do_fetch(self, api_path, destination, type: str="json", order: bool=False, **args) -> None:
+    def _do_fetch(self, api_path, destination, content_type: str="json", order: bool=False, **args) -> None:
         """
         Performs a get request on the connection and commits the content to a given file.
 
@@ -333,18 +343,17 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         if self.source is None : return
 
         self.progress.debug(f"GETting {api_path} with params {args}")
-
         try:
             response = self.source_connection.get(api_path, **args)
         except Exception as e:
-            return
+            return # temporary
             return self.__handle_connection_error(e)
 
         if response.ok:
-            self.progress.debug(f"{response}: {'File' if type == 'file' else response.text}")
-            return self._handle_fetch_response(response, destination, type, order)
+            self.progress.debug(f"{response}: {'File' if content_type == 'file' else response.text}")
+            return self._handle_fetch_response(response, destination, content_type, order)
         else:
-            return
+            return #temporary
 
         self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
 
@@ -459,9 +468,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         Parameters:
             structure: dict
-                The portion of the STRUCTURE dict currntly being indexed.
+                The portion of the STRUCTURE dict currently being indexed.
             parents: dict
-                Indexed resources to which the current structure belongs.
+                Ordered resources to which the current structure belongs.
             kwargs: dict
                 Arbitrary arguments, typically used for custom handlers.
         """
