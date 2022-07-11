@@ -444,6 +444,16 @@ def get_config() -> None:
         write(f'{styled_key}: {value}')
 
 
+@app.command()
+def stats() -> None:
+    """
+    Displays stats about the currently indexed/fetched dataset.
+    """
+    data_directory = config.get("data_directory")
+    for key, value in TransferHandler.STRUCTURE.items():
+        pass
+
+
 @app.async_command()
 async def transfer(
     journals: List[str] = typer.Option(
@@ -516,7 +526,7 @@ async def transfer(
     if push_only:
         transfer_methods = transfer_methods + ["push_only"]
 
-    progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose = verbose(), debug = debug)
+    progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose = True, debug = debug) # Verbose temporarily forced True - TODO: use verbose()
     handler = TransferHandler(data_directory, source=source_def, target=target_def, progress_reporter=progress_reporter)
 
     for method_name in transfer_methods:

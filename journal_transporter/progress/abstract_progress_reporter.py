@@ -58,7 +58,7 @@ class AbstractProgressReporter(ABC):
         self.interface = interface
         self.debug_mode = debug
         self.log_debug = log
-        self.verbose_mode = verbose
+        self.verbose_mode = True# verbose ## Temporary
         self.progress = start
         self.message = init_message
 
@@ -117,7 +117,6 @@ class AbstractProgressReporter(ABC):
             elif update_type is ProgressUpdateType.DETAIL:
                 # Update progress. If verbose, also update the progress bar label.
                 weighted_progress = (progress / self.subtask_length) if hasattr(self, "subtask_length") else progress
-
                 if progress : self.set_progress(weighted_progress)
                 if message and self.verbose_mode : self.set_message(message)
                 self._update_interface()

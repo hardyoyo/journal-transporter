@@ -59,7 +59,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             # "push": False
         },
         "journals": {
-            "name_key": "title",
+            "progress_key": "path",
             "index": {
                 "handler": "_index_journals"
             },
@@ -524,16 +524,20 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
             preprocessor(resource_name, definition, parents, path)
             response = handler(path, url, **kwargs)
-            self.progress_length = self.progress_length + len(response)
 
-            for thing in response:
-                if "children" in definition:
+            if response and "children" in definition:
+                progress_length = len(response) * len(definition.get("children"))
+                self.__set_progress_length(parents, progress_length)
+                for thing in response:
                     thing_path = path / thing["uuid"]
                     thing_path.mkdir()
                     for _j, (child_name, child_structure) in enumerate(definition["children"].items()):
                         new_parents = parents.copy()
                         new_parents[resource_name] = thing
+                        new_parents[resource_name]["progress_key"] = definition.get("progress_key")
                         self._index({ child_name: child_structure }, new_parents)
+
+            self.__increment_progress(parents, 1, f"Indexing {resource_name} complete!")
 
 
     def _fetch_index(self, path, url, **kwargs) -> list:
@@ -620,12 +624,15 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             handler = self._get_handler(config, self.DEFAULT_FETCH_HANDLER)
 
             if config.get("singleton"):
+                self.__set_progress_length(parents, 1)
                 path = self._build_path(parents, resource_name)
                 url  = self._build_url(parents, resource_name)
                 preprocessor(resource_name, definition, parents, path)
                 response = handler(path, url, resource_name, None, **kwargs)
+                self.__increment_progress(parents, 1)
             else:
                 resource_stubs = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
+                self.__set_progress_length(parents, len(resource_stubs))
                 for stub in resource_stubs:
                     path = self._build_path(parents, resource_name, stub)
                     url = self._build_url(parents, resource_name, stub)
@@ -638,8 +645,11 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                             new_parents[resource_name] = response
                             self._fetch({ child_name: child_structure }, new_parents)
 
+                    self.__increment_progress(parents, 1)
 
-    def _fetch_data(self, path, url, resource_name, _stub, **kwargs):
+
+
+    def _fetch_data(self, path, url, resource_name, _stub, **_kwargs):
         """
         Default handler for fetching detail data.
 
@@ -665,7 +675,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         return self._do_fetch(url, file)
 
 
-    def _extract_from_index(self, path, _url, resource_name, stub, **kwargs):
+    def _extract_from_index(self, path, _url, resource_name, stub, **_kwargs):
         """
         Alternate fetch handler for resources with no detail endpoint.
 
@@ -679,7 +689,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         self._replace_file_contents(file, stub)
 
 
-    def _fetch_files(self, path, url, _resource_name, stub, **kwargs):
+    def _fetch_files(self, path, url, _resource_name, stub, **_kwargs):
         """
         Handler for fetching binary files (i.e. article files).
 
@@ -730,11 +740,13 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                 config = {}
 
             self.__update_progress("Pushing", resource_name, definition, parents)
+
             default_preprocessor = "_fetch_foreign_keys" if definition.get("foreign_keys") else self.DEFAULT_PREPROCESSOR
             preprocessor = self._get_preprocessor(config, default_preprocessor)
             handler = self._get_handler(config, self.DEFAULT_PUSH_HANDLER)
 
             resource_index = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
+            self.__set_progress_length(parents, len(resource_index))
 
             for stub in resource_index:
                 path = self._build_path(parents, resource_name, stub)
@@ -747,6 +759,8 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                         new_parents = parents.copy()
                         new_parents[resource_name] = response
                         self._push({ child_name: child_structure }, new_parents)
+
+                self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
 
 
     def _fetch_foreign_keys(self, resource_name, definition, parents, path, stub):
@@ -1010,9 +1024,15 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         return ret
 
 
-    def __update_progress(self, action, resource_name, structure, parents):
+    ## Progress
+
+    def __update_progress(self, action, resource_name, structure, parents, progress_length = None):
         """
         Updates the progress reporter.
+
+        If the action, resource_name, and parents of the object are the same as the last update,
+        do not create new progress bars. In this case, simply update progress length, progress,
+        and message, as necessary.
 
         Parameters:
             action: str
@@ -1026,50 +1046,43 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         """
         message_parts = [action, resource_name]
 
+        if len(parents) : message_parts.extend(["for"])
+        for i, (parent_name, parent) in enumerate(parents.items()):
+            if i > 0:
+                item_name = parent.get(parent.get("progress_key") or "source_record_key").split(":")[-1]
+                message_parts.extend([self.inflector.singularize(parent_name), item_name])
+        message_parts = [x for x in message_parts if x]
+        message = " ".join(message_parts)
+
+        if not progress_length:
+            if structure.get("children"):
+                progress_length = sum([(c.get("progress_weight") or 1) for (k, c) in structure.get("children").items()])
+            else:
+                progress_length = 1
+
         if len(parents) == 0:
-            progress_length = len(structure.get("children")) + 1 if "children" in structure else 1
-            self.minor_progress = 0
-            self.progress.major(" ".join(message_parts), progress_length)
+            self.minor_progress = -1
+            self.progress.major(message, progress_length)
         elif len(parents) == 1:
-            progress_length = self.__get_nested_child_count(structure)
             self.detail_progress = 0
             self.minor_progress = self.minor_progress + 1
-
-            for (parent_name, parent) in parents.items():
-                message_parts.extend(["for", self.inflector.singularize(parent_name), parent.get('title'), resource_name])
-            message_parts = [x for x in message_parts if x]
-
-            self.progress.minor(self.minor_progress, " ".join(message_parts), progress_length)
+            self.progress.minor(self.minor_progress, message, progress_length)
+        elif len(parents) == 2:
+            self.progress.detail(self.detail_progress, message)
         else:
-            self.detail_progress = self.detail_progress + 1
-            self.progress.detail(self.detail_progress)
+            self.progress.detail(self.detail_progress, message)
 
 
-    def __get_major_progress_length(self, structure, length = 1) -> int:
-        for child in (structure.get("children") or []):
-            length = length + self.__get_major_progress_length(child, length)
+    def __increment_progress(self, parents, amount: int = 0, message: str = None) -> None:
+        if len(parents) <= 2:
+            self.detail_progress = (self.detail_progress if hasattr(self, "detail_progress") else 0) + amount
 
-        return length
-
-
-    def __increment_progress(self, action, resource_name, structure, parents):
-        pass
-        # if len(parents) == 0:
-        #     self.minor_progress_length = self.minor_progress_length + 1
-        #     new_progress = self.minor_progress_length
-        # elif len(parents) > 1:
-        #     self.detail_progress_length = self.detail_progress_length + 1
-        #     new_progress = self.detail_progress_length
-        #
-        # self.progress.detail(new_progress)
+        self.progress.detail(self.detail_progress, message)
 
 
-    def __get_nested_child_count(self, structure):
-        ret = 1
-        for _, child in (structure.get("children") or {}).items():
-            ret = ret + self.__get_nested_child_count(child)
-
-        return ret
+    def __set_progress_length(self, parents, length):
+        if len(parents) < 2 and  hasattr(self.progress, "progressbar"):
+            self.progress.progressbar.length = length
 
 
     @staticmethod
