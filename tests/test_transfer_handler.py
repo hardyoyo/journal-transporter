@@ -124,6 +124,10 @@ def test_index(monkeypatch, handler):
 
     handler.fetch_indexes([])
     assert (TMP_PATH / "current" / "journals" / "index.json").exists()
+def test_fetch_gate(monkeypatch, handler):
+    monkeypatch.setattr(requests, "get", mock_get)
+    with pytest.raises(AssertionError):
+        handler.fetch_data([])
 
 
 def test_fetch(monkeypatch, handler):
@@ -132,6 +136,10 @@ def test_fetch(monkeypatch, handler):
     handler.fetch_indexes([])
     handler.fetch_data([])
     assert (TMP_PATH / "current" / "journals" / "index.json").exists()
+def test_push_gate(monkeypatch, handler):
+    monkeypatch.setattr(requests, "get", mock_get)
+    with pytest.raises(AssertionError):
+        handler.push_data([])
 
 
 def test_push(monkeypatch, handler):

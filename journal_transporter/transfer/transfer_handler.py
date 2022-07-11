@@ -24,9 +24,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
     Transfers are split into 3 distinct phases: indexing, fetching details, and pushing. For each,
     iterate through STRUCTURE, handling resources in the defined order.
     """
-    STAGE_INDEXING = "indexing"
-    STAGE_FETCHING = "fetching"
-    STAGE_PUSHING = "pushing"
+    STAGE_INDEXING = "index"
+    STAGE_FETCHING = "fetch"
+    STAGE_PUSHING = "push"
     STAGES = [STAGE_INDEXING, STAGE_FETCHING, STAGE_PUSHING]
 
     DEFAULT_PREPROCESSOR = "_noop_preprocessor"
@@ -253,6 +253,32 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                 return stage
 
 
+    # Transfer lifecycle
+
+    def is_index_finished(self):
+        return bool(self.metadata.get("index_finished"))
+
+
+    def is_fetch_finished(self):
+        return bool(self.metadata.get("fetch_finished"))
+
+
+    def is_push_finished(self):
+        return bool(self.metadata.get("push_finished"))
+
+
+    def can_index(self):
+        return True
+
+
+    def can_fetch(self):
+        return self.is_index_finished()
+
+
+    def can_push(self):
+        return self.is_fetch_finished()
+
+
     ############################
     ## PUBLIC API
     ############################
@@ -269,9 +295,11 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                 Paths/codes of journals to be indexed. This will effectively filter the fetching
                 process, too.
         """
-        self.write_to_meta_file({ "indexing_started": datetime.now().isoformat() })
+        assert self.can_index()
+
+        self.write_to_meta_file({ f"{self.STAGE_INDEXING}_started": datetime.now().isoformat() })
         self._index(self.STRUCTURE, journal_paths=journal_paths)
-        self.write_to_meta_file({ "indexing_finished": datetime.now().isoformat() })
+        self.write_to_meta_file({ f"{self.STAGE_INDEXING}_finished": datetime.now().isoformat() })
 
 
     def fetch_data(self, journal_paths: list) -> None:
@@ -295,9 +323,11 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             progress: AbstractProgressReporter
                 A progress reporter instance used to update the UI
         """
-        self.write_to_meta_file({ "fetch_started": datetime.now().isoformat() })
+        assert self.can_fetch()
+
+        self.write_to_meta_file({ f"{self.STAGE_FETCHING}_started": datetime.now().isoformat() })
         self._fetch(self.STRUCTURE)
-        self.write_to_meta_file({ "fetch_finished": datetime.now().isoformat() })
+        self.write_to_meta_file({ f"{self.STAGE_FETCHING}_finished": datetime.now().isoformat() })
 
 
     def push_data(self, journal_paths: list) -> None:
@@ -314,9 +344,11 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             progress: AbstractProgressReporter
                 A progress reporter instance used to update the UI
         """
-        self.write_to_meta_file({ "push_started": datetime.now().isoformat() })
+        assert self.can_push()
+
+        self.write_to_meta_file({ f"{self.STAGE_PUSHING}_started": datetime.now().isoformat() })
         self._push(self.STRUCTURE)
-        self.write_to_meta_file({ "push_finished": datetime.now().isoformat() })
+        self.write_to_meta_file({ f"{self.STAGE_PUSHING}finished": datetime.now().isoformat() })
 
 
     ## Private-ish
