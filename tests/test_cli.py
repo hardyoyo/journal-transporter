@@ -182,6 +182,9 @@ def test_transfer_errors():
     assert "Source server is required" in result.stdout
     assert "Target server is required" in result.stdout
 
+    result = run("transfer", "--index-only")
+    assert "Source server is required" in result.stdout
+
     result = run("transfer", "--fetch-only")
     assert "Source server is required" in result.stdout
 
@@ -189,7 +192,7 @@ def test_transfer_errors():
     assert "Target server is required" in result.stdout
 
     result = run("transfer", "--fetch-only", "--push-only")
-    assert "--fetch-only and --push-only are both set" in result.stdout
+    assert "Only one of --index-only, --fetch-only, and --push-only can be set" in result.stdout
 
 @patch("journal_transporter.cli.TransferHandler")
 def test_transfer(mock_handler):
@@ -199,5 +202,4 @@ def test_transfer(mock_handler):
     create_fake_server("test_target")
 
     run("transfer", "--force", "--source", "test_source", "--fetch-only")
-
     assert mock_handler.called

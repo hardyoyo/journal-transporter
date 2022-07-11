@@ -1,0 +1,10 @@
+{
+  "source_record_key": "UserRoles:1",
+  "user": {
+    "source_record_key": "User:1"
+  },
+  "roles": [
+    "reviewer",
+    "author"
+  ]
+}

@@ -113,6 +113,32 @@ def assert_target_record_key(structure, path):
         assert_target_record_key(definition.get("children"), path)
 
 
+def ensure_children_exist(start_path, structure, assert_detail_files=False, assert_target_record_keys=False):
+    index_path = start_path / "index.json"
+    assert index_path.exists()
+
+    with open(index_path) as index:
+        parsed_index = json.loads(index.read())
+        for resource in parsed_index:
+            resource_path = start_path / resource["uuid"]
+            if assert_detail_files:
+                assert (resource_path / f"{inflector.English().singularize(start_path.name)}.json").exists()
+            if assert_target_record_keys:
+                detail_file = (resource_path / f"{inflector.English().singularize(start_path.name)}.json")
+                with open(detail_file) as detail:
+                    parsed_detail = json.loads(detail.read())
+                    detail_list = parsed_detail if isinstance(parsed_detail, list) else [parsed_detail]
+                    for detail_dict in detail_list:
+                        if not detail_dict.get("target_record_key") : breakpoint()
+                        assert detail_dict.get("target_record_key")
+            if "children" in structure:
+                assert resource_path.exists()
+                for name, child_str in structure.get("children").items():
+                    child_path = resource_path / name
+                    assert child_path.exists()
+                    ensure_children_exist(child_path, child_str, assert_detail_files, assert_target_record_keys)
+
+
 ## Tests!
 
 def test_setup(handler):
@@ -122,8 +148,14 @@ def test_setup(handler):
 def test_index(monkeypatch, handler):
     monkeypatch.setattr(requests, "get", mock_get)
 
+    structure = handler.STRUCTURE
+
     handler.fetch_indexes([])
-    assert (TMP_PATH / "current" / "journals" / "index.json").exists()
+
+    for (k, v) in structure.items():
+        ensure_children_exist((TMP_PATH / "current" / k), v)
+
+
 def test_fetch_gate(monkeypatch, handler):
     monkeypatch.setattr(requests, "get", mock_get)
     with pytest.raises(AssertionError):
@@ -133,9 +165,15 @@ def test_fetch_gate(monkeypatch, handler):
 def test_fetch(monkeypatch, handler):
     monkeypatch.setattr(requests, "get", mock_get)
 
+    structure = handler.STRUCTURE
+
     handler.fetch_indexes([])
     handler.fetch_data([])
-    assert (TMP_PATH / "current" / "journals" / "index.json").exists()
+
+    for (k, v) in structure.items():
+        ensure_children_exist((TMP_PATH / "current" / k), v, assert_detail_files=True)
+
+
 def test_push_gate(monkeypatch, handler):
     monkeypatch.setattr(requests, "get", mock_get)
     with pytest.raises(AssertionError):
@@ -149,6 +187,10 @@ def test_push(monkeypatch, handler):
     handler.fetch_indexes([])
     handler.fetch_data([])
     handler.push_data([])
+
+    structure = handler.STRUCTURE
+    for (k, v) in structure.items():
+        ensure_children_exist((TMP_PATH / "current" / k), v, assert_target_record_keys=True)
 
     path = TMP_PATH
     assert_target_record_key(TransferHandler.STRUCTURE, path)
