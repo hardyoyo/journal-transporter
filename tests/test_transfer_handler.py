@@ -129,7 +129,6 @@ def ensure_children_exist(start_path, structure, assert_detail_files=False, asse
                     parsed_detail = json.loads(detail.read())
                     detail_list = parsed_detail if isinstance(parsed_detail, list) else [parsed_detail]
                     for detail_dict in detail_list:
-                        if not detail_dict.get("target_record_key") : breakpoint()
                         assert detail_dict.get("target_record_key")
             if "children" in structure:
                 assert resource_path.exists()

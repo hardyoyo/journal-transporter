@@ -22,6 +22,6 @@ printf "\n$(tput setaf 2)Journal Transporter CLI Application initialized!$(tput 
 printf "$(tput setaf 5)You can now invoke the application with bin/jt <CMD> or by activating your virtual environment and running pythom -m journal_transporter <CMD>$(tput sgr0)\n\n"
 
 # Add shortcut /usr/local/bin so it can be executed from anywhere as jt
-ln -s $dir_path/jt /usr/local/bin/jt
+ln -s $dir_path/journal-transporter /usr/local/bin/journal-transporter
 
 python -m journal_transporter --help
