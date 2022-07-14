@@ -1,11 +1,14 @@
 # Journal Transporter
 
-A Python 3 CLI application to handle the transfer of journal data to and from OJS and Janeway.
+Journal Transporter is a Python 3 CLI application that facilitates the transfer of scholarly journal data to and from different online publishing platforms.
+
+## Requirements
+
+* Python 3.9 / Pip3
+* Linux or Unix-based OS
+  * Untested on Windows. It may work, except for included Bash scripts
 
 ## Installation
-
-This module requires Python 3.9 or greater. It comes preinstalled on my modern systems, but if not you can
-download it at https://www.python.org/downloads/.
 
 Clone this repo and navigate to it. Install dependencies with `bin/install`.
 
@@ -244,7 +247,7 @@ Fetching will pull detailed JSON data for each indexed object, as well as refere
 The final step of the transfer process is pushing the fetched data to the target server (in this example, a Janeway instance). This can be done, provided indexing and fetching have already been completed, with:
 
 ```bash
-journal-transporter --verbose transfer --push-only --source ojs --journal sample_journal
+journal-transporter --verbose transfer --push-only --target janeway --journal sample_journal
 ```
 
 Note that the plugin on the target server (in this case, the Janeway plugin) is responsible for handling the raw data pushed to it by Journal Transporter. Before starting the push, ensure that the target database is ready to accept the data (i.e. sufficient space, no impending journal code conflicts, etc.)
