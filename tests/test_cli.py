@@ -57,7 +57,7 @@ def create_fake_server(server_name: str = "test_server", host: str = "https://ww
             self.progress_reporter = progress_reporter
 
         def fetch_indexes(self, paths):
-            self.indexed = true
+            self.indexed = True
             self.index_paths = paths
 
         def fetch_data(self, paths):
