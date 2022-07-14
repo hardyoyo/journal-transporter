@@ -284,7 +284,7 @@ Files fall into a data hierarchy that resembles the following:
 
 ### Files
 
-The above translates into a file structure that looks something like the following example (truncated for brevity):
+The above translates into a file structure that looks something like the following example (truncated for brevity, with example UUIDs):
 
 - users/
   - index.json
@@ -322,4 +322,5 @@ Except for binary files, all files are text and can be opened and reviewed in an
 TBD
 
 ## Contributions
-TBD
+
+Contributions are welcome. Please see guidelines in [the contributing file](https://github.com/castiron/journal-transporter/blob/main/contributing.md).
