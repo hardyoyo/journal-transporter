@@ -3,27 +3,30 @@
 # All tests should only write files to the test/tmp directory,
 # which will be cleaned up automatically at the end of each test.
 
-import pytest, typer, shutil, asyncio
+import pytest
+import shutil
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from pathlib import Path
 from typer.testing import CliRunner
+from typing import Any
 
-from journal_transporter import __app_name__, __version__, cli, config, database
-from journal_transporter.transfer.transfer_handler import TransferHandler
-
-import tests.shared
+from journal_transporter import __app_name__, __version__, cli, config
+from journal_transporter.progress import AbstractProgressReporter
 
 runner = CliRunner()
 
 TMP_PATH = Path("./tests/tmp")
 
+
 def make_tmp():
     TMP_PATH.mkdir(exist_ok=True)
 
+
 def clean_up():
-    if TMP_PATH.exists() : shutil.rmtree(TMP_PATH)
+    if TMP_PATH.exists(): shutil.rmtree(TMP_PATH)
+
 
 @pytest.fixture(autouse=True)
 def around_each():
@@ -31,44 +34,42 @@ def around_each():
     yield
     clean_up()
 
+
 def run(*args):
     result = runner.invoke(cli.app, ["--test", *args])
     return result
 
 
-## Helpers
+# Helpers
 
-def create_fake_server(server_name="test_server", host="https://www.example.com", username="username", password="password", type="http"):
+def create_fake_server(server_name: str = "test_server", host: str = "https://www.example.com",
+                       username: str = "username", password: str = "password", type: str = "http") -> Any:
     return run("define-server", server_name, "-t", type, "-h", host, "-u", username, "-p", password)
 
-
-## Doubles
+# Doubles
 
     class MockTransferHandler:
 
-        def __init__(self, data_directory, source, target, progress_reporter):
+        def __init__(self, data_directory: Path, source: str, target: str, progress_reporter: AbstractProgressReporter):
             self.data_directory = data_directory
             self.source = source
             self.target = target
             self.progress_reporter = progress_reporter
 
-
         def fetch_indexes(self, paths):
             self.indexed = true
             self.index_paths = paths
 
-
         def fetch_data(self, paths):
             self.fetched = self.indexed
             self.fetch_paths = paths
-
 
         def push_data(self, paths):
             self.pushed = self.fetched
             self.push_paths = paths
 
 
-## Tests!
+# Tests!
 
 def test_version():
     result = run("--version")
@@ -93,7 +94,8 @@ def test_configure():
 
     subdir = "datatest"
 
-    result = run("-v", "configure", "-d", str(TMP_PATH / subdir), "--default-source", "source", "--default-target", "target", "--keep")
+    result = run("-v", "configure", "-d", str(TMP_PATH / subdir),
+                 "--default-source", "source", "--default-target", "target", "--keep")
     assert result.exit_code == 0
     assert config.get("data_directory") == str(TMP_PATH / subdir)
     assert config.get("default_source") == "source"
@@ -193,6 +195,7 @@ def test_transfer_errors():
 
     result = run("transfer", "--fetch-only", "--push-only")
     assert "Only one of --index-only, --fetch-only, and --push-only can be set" in result.stdout
+
 
 @patch("journal_transporter.cli.TransferHandler")
 def test_transfer(mock_handler):

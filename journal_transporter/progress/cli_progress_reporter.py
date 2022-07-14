@@ -10,6 +10,7 @@ from journal_transporter.progress.abstract_progress_reporter import AbstractProg
 from journal_transporter.progress.progress_update_type import ProgressUpdateType
 from journal_transporter import cli
 
+
 class CliProgressReporter(AbstractProgressReporter):
 
     def set_progress(self, new_total_progress: int) -> None:
@@ -19,11 +20,10 @@ class CliProgressReporter(AbstractProgressReporter):
         self.progress_diff = new_total_progress - self.progress
         super().set_progress(new_total_progress)
 
-
     def clean_up(self) -> None:
         self._close_progress_bar()
 
-    ## Protected
+    # Protected
 
     def _update_interface(self) -> None:
         self.progressbar.label = self.message
@@ -33,8 +33,8 @@ class CliProgressReporter(AbstractProgressReporter):
         # Zero out progress_diff in case this gets called again before set_progress.
         self.progress_diff = 0
 
-
-    def _new_progress_bar(self, length: int, before_message: str = None, bar_init_message: str = "Initializing...", start: int = 0) -> None:
+    def _new_progress_bar(self, length: int, before_message: str = None, bar_init_message: str = "Initializing...",
+                          start: int = 0) -> None:
         # Annoyingly, Click requires that progressbars be used in a with block. That doesn't
         # work for us, so we're going to hack our way around it. This may be brittle with
         # Click version upgrades.
@@ -46,24 +46,21 @@ class CliProgressReporter(AbstractProgressReporter):
         self.set_progress(0)
         self.progress_diff = 0
 
-        if before_message : self._print_message(before_message)
-
+        if before_message: self._print_message(before_message)
         self.progressbar = self.interface.progressbar(**self.__progressbar_options(length))
 
         # Simulate a block __enter__
-        # See https://github.com/pallets/click/blob/d14ee193d01096113d5de0428b8552bcd5f368e9/src/click/_termui_impl.py#L96
+        # See https://github.com/pallets/click/blob/d14ee193d01096113d5de0428b8552bcd5f368e9/src/click/_termui_impl.py#L96 # noqa
         self.progressbar.entered = True
         self.progressbar.render_progress()
 
-        if bar_init_message : self.progressbar.label = bar_init_message
-        if start : self.progressbar.update(start)
-
+        if bar_init_message: self.progressbar.label = bar_init_message
+        if start: self.progressbar.update(start)
 
     def _close_progress_bar(self) -> None:
         # Simulate a block __exit__
-        # See https://github.com/pallets/click/blob/d14ee193d01096113d5de0428b8552bcd5f368e9/src/click/_termui_impl.py#L101
-        if hasattr(self, "progressbar") : self.progressbar.render_finish()
-
+        # See https://github.com/pallets/click/blob/d14ee193d01096113d5de0428b8552bcd5f368e9/src/click/_termui_impl.py#L101 # noqa
+        if hasattr(self, "progressbar"): self.progressbar.render_finish()
 
     def _handle_debug(self, message: str, update_type: ProgressUpdateType = ProgressUpdateType.DEBUG) -> None:
         if update_type is ProgressUpdateType.MAJOR:
@@ -75,17 +72,16 @@ class CliProgressReporter(AbstractProgressReporter):
         elif update_type is ProgressUpdateType.DEBUG:
             theme = "info"
 
-        if message : self._print_message(f"{self._now()} -- {message}", theme)
+        if message: self._print_message(f"{self._now()} -- {message}", theme)
 
-
-    def _print_message(self, message: str, theme: str = None, error: bool = False, fatal_error: bool = False, **kwargs) -> None:
-        if fatal_error : theme = "error"
-        elif error : theme = "warning"
+    def _print_message(self, message: str, theme: str = None, error: bool = False,
+                       fatal_error: bool = False, **kwargs) -> None:
+        if fatal_error: theme = "error"
+        elif error: theme = "warning"
 
         cli.write(message, theme)
 
-
-    ## Private
+    # Private
 
     def __progressbar_options(self, length: int) -> dict:
         """

@@ -1,12 +1,13 @@
 """This module provides access and management of a configuration file."""
 # journal_transporter/config.py
 
+import os
+import typer
+
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from pathlib import Path
 
-import typer, os
-
-from journal_transporter import (
+from journal_transporter import (  # noqa
     WRITE_ERROR,
     READ_ERROR,
     DIR_ERROR,
@@ -16,7 +17,7 @@ from journal_transporter import (
     __app_name__
 )
 
-CONFIG_DIR_PATH = Path("tests/tmp") if os.getenv("PYTHON_ENV") == "test"  else Path(typer.get_app_dir(__app_name__))
+CONFIG_DIR_PATH = Path("tests/tmp") if os.getenv("PYTHON_ENV") == "test" else Path(typer.get_app_dir(__app_name__))
 CONFIG_FILE_PATH = CONFIG_DIR_PATH / "config.ini"
 
 CONFIG_SECTION = "config"
@@ -34,7 +35,7 @@ def create(data_dir: Path) -> int:
     try:
         _config_path().touch(exist_ok=True)
         cfg = get_config()
-        cfg[CONFIG_SECTION] = { "data_directory": data_dir }
+        cfg[CONFIG_SECTION] = {"data_directory": data_dir}
         _write_config(cfg)
     except OSError:
         return FILE_ERROR
@@ -61,7 +62,7 @@ def define_server(**server_info) -> int:
 
     server_name = server_info.pop("name", None)
 
-    if not server_name in cfg:
+    if server_name not in cfg:
         cfg[server_name] = {}
 
     for key, value in server_info.items():
@@ -74,7 +75,7 @@ def get_server(server_name) -> dict:
     """Gets a single server definition dict from config, if it exists"""
     try:
         server_def = get_config()[server_name]
-        return { "name": server_name, **server_def }
+        return {"name": server_name, **server_def}
     except KeyError:
         return None
 
@@ -138,7 +139,7 @@ def _init_config_file(data_dir: Path) -> int:
     try:
         _config_path().touch(exist_ok=True)
         cfg = get_config()
-        cfg[CONFIG_SECTION] = { "data_directory": data_dir }
+        cfg[CONFIG_SECTION] = {"data_directory": data_dir}
         _write_config(cfg)
     except OSError:
         return FILE_ERROR

@@ -1,10 +1,12 @@
-import pytest, shutil
+import pytest
+import shutil
 
 from pathlib import Path
 
 from journal_transporter import config
 
 TMP_PATH = Path("./tests/tmp")
+
 
 def make_tmp():
     TMP_PATH.mkdir(exist_ok=True)
@@ -13,7 +15,7 @@ def make_tmp():
 
 
 def clean_up():
-    if TMP_PATH.exists() : shutil.rmtree(TMP_PATH)
+    if TMP_PATH.exists(): shutil.rmtree(TMP_PATH)
 
 
 @pytest.fixture(autouse=True)

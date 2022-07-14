@@ -1,3 +1,6 @@
+# Class not in use
+# flake8: noqa
+
 import asyncio, asyncssh, json
 
 from journal_transporter.transfer.abstract_connection import AbstractConnection

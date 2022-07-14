@@ -3,14 +3,19 @@
 # All tests should only write files to the test/tmp directory,
 # which will be cleaned up automatically at the end of each test.
 
-import pytest, shutil, json, requests, inflector
+import inflector
+import json
+import pytest
+import requests
 
 from pathlib import Path
+from typing import Union
 
-from journal_transporter import database, config
+from journal_transporter import database
 from journal_transporter.transfer.transfer_handler import TransferHandler
 
-from tests.shared import around_each, TMP_PATH
+from tests.shared import TMP_PATH
+
 
 @pytest.fixture(autouse=True)
 def setup_data_dir():
@@ -24,7 +29,7 @@ class MockGetResponse:
         self.path = path.replace(server()["host"] + "/", "")
         self.is_file = "files/" in self.path
 
-        self.headers = { "content-disposition": "attachment; filename='1.pdf'" if self.is_file else "" }
+        self.headers = {"content-disposition": "attachment; filename='1.pdf'" if self.is_file else ""}
 
         extension = "pdf" if self.is_file else "json"
         open_mode = "rb" if self.is_file else "r"
@@ -32,21 +37,18 @@ class MockGetResponse:
 
         with open(fixture_path, open_mode) as file:
             self.content = file.read()
-
         self.text = self.content
 
-
-    def json(self):
+    def json(self) -> Union[dict, list]:
         return json.loads(self.content)
 
-
-    def ok(self):
+    def ok(self) -> bool:
         return True
 
 
 class MockPostResponse(MockGetResponse):
 
-    def __init__(self, path, **kwargs):
+    def __init__(self, path: Path, **kwargs):
         self.inflector = inflector.English()
         self.path = path.replace(server()["host"] + "/", "")
         self.data = kwargs.get("json") or kwargs.get("data")
@@ -65,14 +67,13 @@ class MockPostResponse(MockGetResponse):
 
         self.text = self.content
 
-
-    def json(self):
+    def json(self) -> dict:
         content = json.loads(self.content)
         content["source_record_key"] = f"{self.path.rstrip('/').split('/')[-1]}:1"
         return content
 
 
-## Helpers
+# Helpers
 
 def server():
     return {
@@ -85,7 +86,7 @@ def server():
 
 @pytest.fixture
 def handler():
-    return TransferHandler(TMP_PATH, source = server(), target = server())
+    return TransferHandler(TMP_PATH, source=server(), target=server())
 
 
 def mock_get(path, *args, **kwargs):
@@ -97,7 +98,7 @@ def mock_post(path, *args, **kwargs):
 
 
 def assert_target_record_key(structure, path):
-    if not structure : return
+    if not structure: return
 
     for resource, definition in structure.items():
         path = path / resource
@@ -138,7 +139,7 @@ def ensure_children_exist(start_path, structure, assert_detail_files=False, asse
                     ensure_children_exist(child_path, child_str, assert_detail_files, assert_target_record_keys)
 
 
-## Tests!
+# Tests!
 
 def test_setup(handler):
     assert Path(TMP_PATH).exists()

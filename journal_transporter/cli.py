@@ -24,26 +24,30 @@ Color standards:
 # journal_transporter/cli.py
 
 from pathlib import Path
-from typing import Optional, List, Union
+from typing import Any, Optional, List, Union
 from enum import Enum
 
-import typer, asyncio, os
+import typer
+import os
 
 from journal_transporter import __app_name__, __version__, ERRORS, config, database
 from journal_transporter.transfer.transfer_handler import TransferHandler
 from journal_transporter.progress.cli_progress_reporter import CliProgressReporter
 
+
 class ConnectionType(str, Enum):
     ssh = "ssh"
     http = "http"
 
+
 app = typer.Typer()
-state = { "verbose": False, "test": False }
+state = {"verbose": False, "test": False}
 
 
 # CLI options
 
-def build_option(required: bool = False, default = None, tag: str = "", shortcut: str = None, help: str = None, **opts):
+def build_option(required: bool = False, default: Any = None, tag: str = "",
+                 shortcut: str = None, help: str = None, **opts) -> typer.Option:
     # Remove Nones from tags
     args = list(filter(None, [tag, shortcut]))
 
@@ -55,7 +59,7 @@ def build_option(required: bool = False, default = None, tag: str = "", shortcut
     )
 
 
-def opt_data_directory(required: bool = False, default: Path = Path(typer.get_app_dir(__app_name__))):
+def opt_data_directory(required: bool = False, default: Path = Path(typer.get_app_dir(__app_name__))) -> typer.Option:
     return build_option(
         required,
         default,
@@ -65,7 +69,8 @@ def opt_data_directory(required: bool = False, default: Path = Path(typer.get_ap
     )
 
 
-def opt_source(required: bool = False, default: str = None, help: str = "Name of an already-defined source server to use (see define-server)"):
+def opt_source(required: bool = False, default: str = None,
+               help: str = "Name of an already-defined source server to use (see define-server)") -> typer.Option:
     return build_option(
         required,
         default,
@@ -75,7 +80,8 @@ def opt_source(required: bool = False, default: str = None, help: str = "Name of
     )
 
 
-def opt_target(required: bool = False, default: str = None, help: str = "Name of an already-defined target server to use (see define-server)"):
+def opt_target(required: bool = False, default: str = None,
+               help: str = "Name of an already-defined target server to use (see define-server)") -> typer.Option:
     return build_option(
         required,
         default,
@@ -85,7 +91,7 @@ def opt_target(required: bool = False, default: str = None, help: str = "Name of
     )
 
 
-def opt_keep(default: bool = None):
+def opt_keep(default: bool = None) -> typer.Option:
     return build_option(
         False,
         default,
@@ -95,7 +101,7 @@ def opt_keep(default: bool = None):
     )
 
 
-def opt_keep_max(default: int = None):
+def opt_keep_max(default: int = None) -> typer.Option:
     return build_option(
         False,
         default,
@@ -117,7 +123,7 @@ def is_test() -> bool:
     return state["test"] or os.getenv("PYTHON_ENV") == "test"
 
 
-def color(type):
+def color(type: str) -> dict:
     """
     Provides Typer kwargs for color themes.
 
@@ -129,23 +135,23 @@ def color(type):
         dict: Typer kwargs to display proper colors.
     """
     if type == "attention":
-        return { "fg":  typer.colors.YELLOW }
+        return {"fg": typer.colors.YELLOW}
     elif type == "info":
-        return { "fg":  typer.colors.MAGENTA }
+        return {"fg": typer.colors.MAGENTA}
     elif type == "warning":
-        return { "fg":  typer.colors.RED }
+        return {"fg": typer.colors.RED}
     elif type == "success":
-        return { "fg":  typer.colors.GREEN }
+        return {"fg": typer.colors.GREEN}
     elif type == "highlight":
-        return { "fg": typer.colors.BRIGHT_BLUE}
+        return {"fg": typer.colors.BRIGHT_BLUE}
     elif type == "header":
-        return { "fg": typer.colors.WHITE, "bg": typer.colors.BLUE }
+        return {"fg": typer.colors.WHITE, "bg": typer.colors.BLUE}
     elif type == "error":
-        return { "fg": typer.colors.BLACK, "bg": typer.colors.RED }
+        return {"fg": typer.colors.BLACK, "bg": typer.colors.RED}
     elif type == "great_success":
-        return { "fg": typer.colors.BLACK, "bg": typer.colors.GREEN }
+        return {"fg": typer.colors.BLACK, "bg": typer.colors.GREEN}
     else:
-        return { "fg": typer.colors.WHITE }
+        return {"fg": typer.colors.WHITE}
 
 
 def write(text: str, theme: str = None, line_break: Union[str, bool] = False, **options) -> None:
@@ -165,12 +171,12 @@ def write(text: str, theme: str = None, line_break: Union[str, bool] = False, **
         options: dict
             Arbitrary options to pass to typer.secho as kwargs.
     """
-    if line_break in (True, "before", "both") : write_line_break()
+    if line_break in (True, "before", "both"): write_line_break()
     typer.secho(f"    {text}", **color(theme), **options)
-    if line_break in (True, "after", "both") : write_line_break()
+    if line_break in (True, "after", "both"): write_line_break()
 
 
-def verbose_write(text, line_break=False, theme="info", **options) -> None:
+def verbose_write(text: str, line_break: bool = False, theme: str = "info", **options) -> None:
     """
     Prints to the terminal if CLI is in verbose mode with standardized formatting.
 
@@ -187,7 +193,7 @@ def verbose_write(text, line_break=False, theme="info", **options) -> None:
         options: dict
             Arbitrary options to pass to typer.secho as kwargs.
     """
-    if verbose() : write(text, theme, line_break, **options)
+    if verbose(): write(text, theme, line_break, **options)
 
 
 def write_line_break() -> None:
@@ -195,13 +201,13 @@ def write_line_break() -> None:
     write("")
 
 
-def confirm(text, theme="attention", abort=True, **options):
+def confirm(text: str, theme: str = "attention", abort: bool = True, **options) -> None:
     """Prints a confirmation prompt to the terminal with standardized formatting."""
     message = typer.style(f"    {text}", **color(theme))
     typer.confirm(message, abort=abort, **options)
 
 
-def abort_if_errors(errors):
+def abort_if_errors(errors: list) -> None:
     """
     Prints a message and raises an Exit command if errors are provided.
 
@@ -217,7 +223,7 @@ def abort_if_errors(errors):
         raise typer.Exit(1)
 
 
-## Commands
+# Commands
 
 @app.command()
 def init(
@@ -342,7 +348,7 @@ def define_server(
     will update that server rather than creating a new one.
     """
     args = {k: v for k, v in locals().items() if v is not None}
-    if type : args["type"] = type.value
+    if type: args["type"] = type.value
     existing = config.get_server(name)
 
     if existing:
@@ -357,14 +363,13 @@ def define_server(
         verbose_write(f'Name: {name}')
         verbose_write(f'Type: {type}')
         verbose_write(f'Host: {host}')
-        if username : verbose_write(f'User: {username}')
-        if password : verbose_write(f'Password: {password}')
+        if username: verbose_write(f'User: {username}')
+        if password: verbose_write(f'Password: {password}')
 
-        verbose_write(
-            f'You can reference this server by passing its name ({name}) as the ' +
-            f'--source or --destination options of a relevant command.',
-            line_break="before"
-        )
+        verbose_write((f"You can reference this server by passing its name ({name}) as the "
+                       "--source or --destination options of a relevant command."),
+                      line_break="before"
+                      )
 
         write("Server configuration saved!", "success", "before")
 
@@ -419,7 +424,7 @@ def get_server(
 
     if len(server_list) > 0:
         for index, server_def in enumerate(server_list):
-            if not get_named : write(f'#{index + 1}', line_break="before", bold=True)
+            if not get_named: write(f'#{index + 1}', line_break="before", bold=True)
 
             for _i, key in enumerate(server_def):
                 value = server_def[key]
@@ -448,8 +453,10 @@ def get_config() -> None:
 def stats() -> None:
     """
     Displays stats about the currently indexed/fetched dataset.
+
+    WIP
     """
-    data_directory = config.get("data_directory")
+    data_directory = config.get("data_directory") # noqa
     for key, value in TransferHandler.STRUCTURE.items():
         pass
 
@@ -462,8 +469,8 @@ async def transfer(
         "-j",
         help="Any number of journal key names (also known as 'paths' or 'codes') that are to be transferred"
     ),
-    source: Optional[str] = opt_source(default = config.get("default_source")),
-    target: Optional[str] = opt_target(default = config.get("default_target")),
+    source: Optional[str] = opt_source(default=config.get("default_source")),
+    target: Optional[str] = opt_target(default=config.get("default_target")),
     fetch_only: Optional[bool] = typer.Option(
         False,
         "--fetch-only",
@@ -479,8 +486,8 @@ async def transfer(
         "--index-only",
         help="If true, only index data and do not fetch or push."
     ),
-    data_directory: Optional[str] = opt_data_directory(default = config.get("data_directory")),
-    keep: Optional[bool] = opt_keep(default = config.get("keep")),
+    data_directory: Optional[str] = opt_data_directory(default=config.get("data_directory")),
+    keep: Optional[bool] = opt_keep(default=config.get("keep")),
     debug: Optional[bool] = typer.Option(
         False,
         "--debug",
@@ -504,29 +511,36 @@ async def transfer(
     source_def = config.get_server(source)
     target_def = config.get_server(target)
 
-    if source_def == None and not push_only:
+    if source_def is None and not push_only:
         errors.append(f'Source server {f"{source} is not defined" if source is not None else "is required"}')
-    if target_def == None and not (index_only or fetch_only):
+    if target_def is None and not (index_only or fetch_only):
         errors.append(f'Target server {f"{target} is not defined" if target is not None else "is required"}')
 
     if len([x for x in [index_only, fetch_only, push_only] if x]) > 1:
-        errors.append("Only one of --index-only, --fetch-only, and --push-only can be set. Note that --fetch-only implicitly includes index.")
+        errors.append("Only one of --index-only, --fetch-only, and --push-only can be set. Note that --fetch-only \
+                      implicitly includes index.")
 
     abort_if_errors(errors)
 
-    message = f"You are about to transfer {len(journals) or 'ALL'} journal(s) from {f'server `{source}`' if source else 'local storage'} to {f'server `{target}`' if target else 'local storage'}. Are you sure?"
-    if not force : confirm(message)
+    message = (f"You are about to transfer {len(journals) or 'ALL'} journal(s) from"
+               f"{f'server `{source}`' if source else 'local storage'} to"
+               f"{f'server `{target}`' if target else 'local storage'}. Are you sure?")
+    if not force: confirm(message)
 
     transfer_methods = []
-    if index_only or fetch_only:
+    if index_only:
         database.prepare(keep)
         transfer_methods = transfer_methods + ["fetch_indexes"]
-    if fetch_only:
+    elif fetch_only:
         transfer_methods = transfer_methods + ["fetch_data"]
-    if push_only:
-        transfer_methods = transfer_methods + ["push_only"]
+    elif push_only:
+        transfer_methods = transfer_methods + ["push_data"]
+    else:
+        database.prepare(keep)
+        transfer_methods = ["fetch_indexes", "fetch_data", "push_data"]
 
-    progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose = True, debug = debug) # Verbose temporarily forced True - TODO: use verbose()
+    # Verbose temporarily forced True - TODO: use verbose()
+    progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose=True, debug=debug)
     handler = TransferHandler(data_directory, source=source_def, target=target_def, progress_reporter=progress_reporter)
 
     for method_name in transfer_methods:

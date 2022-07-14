@@ -1,13 +1,13 @@
 """This module provides access to and management of the data directory."""
 # journal_transporter/database.py
 
-import configparser, shutil, os
+import os
+import shutil
+
 from pathlib import Path
 from datetime import datetime
 
-import typer
-
-from journal_transporter import WRITE_ERROR, SUCCESS, __app_name__, config
+from journal_transporter import WRITE_ERROR, SUCCESS, config
 
 
 def get_database_path() -> Path:
@@ -48,8 +48,7 @@ def prepare(keep=None):
 
 def enforce_keep_limit():
     limit = config.get("keep_limit")
-    if not limit : return
-
+    if not limit: return
 
     base = Path(get_database_path())
     dir_names = []
@@ -61,4 +60,4 @@ def enforce_keep_limit():
     if len(dir_names) > limit:
         doomed_name = sorted(dir_names)[-1]
         doomed_dir = base / doomed_name
-        if doomed_dir.exists() : doomed_dir.unlink()
+        if doomed_dir.exists(): doomed_dir.unlink()

@@ -1,0 +1,11 @@
+[flake8]
+
+  exclude =
+    .git,
+    .pytest_cache,
+    .venv,
+    __pycache__
+
+  max-line-length=120
+  ignore=E701
+  count=true

@@ -1,7 +1,8 @@
 """Types of progress updates"""
 # journal_transporter/progress/progress_update_type.py
 
-from enum import Enum, auto
+from enum import Enum
+
 
 class ProgressUpdateType(Enum):
     # MAJOR updates create a new progress bar. Typically, there should be one MAJOR update
@@ -18,10 +19,8 @@ class ProgressUpdateType(Enum):
     # DEBUG updates print lines in debug mode. Debug mode does not display progress bars.
     DEBUG = 4
 
-
     def verbose(self) -> bool:
         return self.value > 1
-
 
     def debug(self) -> bool:
         return self.value > 3

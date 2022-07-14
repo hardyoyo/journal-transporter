@@ -17,7 +17,8 @@ from journal_transporter.transfer.ssh_connection import SSHConnection
 from journal_transporter.progress.abstract_progress_reporter import AbstractProgressReporter
 from journal_transporter.progress.null_progress_reporter import NullProgressReporter
 
-class TransferHandler: #pylint: disable=too-many-instance-attributes
+
+class TransferHandler:
     """
     Handles the transfer of journal data from source servers to target server.
 
@@ -152,13 +153,13 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
     }
 
     ############################
-    ## INITITALIZATION / LIFECYCLE
+    # INITITALIZATION / LIFECYCLE
     ############################
 
     def __init__(
         self, data_directory: str, source: dict = None, target: dict = None,
         progress_reporter: AbstractProgressReporter = NullProgressReporter(None),
-        **options
+        dry_run: bool = False, **options
     ):
         """
         Parameters:
@@ -177,13 +178,12 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         self.progress_length = 0
         self.progress = progress_reporter
         self.options = options
-        # pylint: disable=abstract-class-instantiated
         self.source_connection = self.__connection_class(source)(**self.source) if source is not None else None
         self.target_connection = self.__connection_class(target)(**self.target) if target is not None else None
-
         self.inflector = inflector.English()
-        self.initialize_data_directory()
-
+        if not dry_run: self.initialize_data_directory()
+        assert self.metadata
+        assert self.uuid
 
     def initialize_data_directory(self) -> None:
         """
@@ -193,7 +193,8 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         """
         self.metadata_file = self.data_directory / "index.json"
         if self.metadata_file.exists():
-            self.uuid = uuid.UUID(self.__load_file_data(self.metadata_file).get("transaction_id"))
+            self.metadata = self.__load_file_data(self.metadata_file)
+            self.uuid = uuid.UUID(self.metadata.get("transaction_id"))
         else:
             self.metadata_file.touch()
             now = datetime.now()
@@ -209,10 +210,8 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             with open(self.metadata_file, "w") as file:
                 file.write(json.dumps(self.metadata))
 
-
     def finalize(self) -> None:
         pass
-
 
     # Meta file management
 
@@ -226,10 +225,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         """
         with open(self.metadata_file, "r") as file:
             existing_content = json.loads(file.read())
-            self.metadata = { **existing_content, **data }
+            self.metadata = {**existing_content, **data}
 
         self._replace_file_contents(self.metadata_file, self.metadata)
-
 
     @staticmethod
     def _replace_file_contents(file: Path, data: dict) -> None:
@@ -243,7 +241,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             open_file.write(json.dumps(data, indent=2))
             open_file.truncate()
 
-
     def current_stage(self) -> str:
         """Gets the current stage the transfer is in: index, fetch, or push."""
         for stage in self.STAGES:
@@ -252,35 +249,28 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             if self.metadata.get(started) and not self.metadata.get(finished):
                 return stage
 
-
     # Transfer lifecycle
 
     def is_index_finished(self):
         return bool(self.metadata.get("index_finished"))
 
-
     def is_fetch_finished(self):
         return bool(self.metadata.get("fetch_finished"))
-
 
     def is_push_finished(self):
         return bool(self.metadata.get("push_finished"))
 
-
     def can_index(self):
         return True
-
 
     def can_fetch(self):
         return self.is_index_finished()
 
-
     def can_push(self):
         return self.is_fetch_finished()
 
-
     ############################
-    ## PUBLIC API
+    # PUBLIC API
     ############################
 
     def fetch_indexes(self, journal_paths: list) -> None:
@@ -297,10 +287,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         """
         assert self.can_index()
 
-        self.write_to_meta_file({ f"{self.STAGE_INDEXING}_started": datetime.now().isoformat() })
+        self.write_to_meta_file({f"{self.STAGE_INDEXING}_started": datetime.now().isoformat()})
         self._index(self.STRUCTURE, journal_paths=journal_paths)
-        self.write_to_meta_file({ f"{self.STAGE_INDEXING}_finished": datetime.now().isoformat() })
-
+        self.write_to_meta_file({f"{self.STAGE_INDEXING}_finished": datetime.now().isoformat()})
 
     def fetch_data(self, journal_paths: list) -> None:
         """
@@ -325,10 +314,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         """
         assert self.can_fetch()
 
-        self.write_to_meta_file({ f"{self.STAGE_FETCHING}_started": datetime.now().isoformat() })
+        self.write_to_meta_file({f"{self.STAGE_FETCHING}_started": datetime.now().isoformat()})
         self._fetch(self.STRUCTURE)
-        self.write_to_meta_file({ f"{self.STAGE_FETCHING}_finished": datetime.now().isoformat() })
-
+        self.write_to_meta_file({f"{self.STAGE_FETCHING}_finished": datetime.now().isoformat()})
 
     def push_data(self, journal_paths: list) -> None:
         """
@@ -346,18 +334,18 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         """
         assert self.can_push()
 
-        self.write_to_meta_file({ f"{self.STAGE_PUSHING}_started": datetime.now().isoformat() })
+        self.write_to_meta_file({f"{self.STAGE_PUSHING}_started": datetime.now().isoformat()})
         self._push(self.STRUCTURE)
-        self.write_to_meta_file({ f"{self.STAGE_PUSHING}finished": datetime.now().isoformat() })
+        self.write_to_meta_file({f"{self.STAGE_PUSHING}finished": datetime.now().isoformat()})
 
-
-    ## Private-ish
+    # Private-ish
 
     ############################
-    ## CONNECTION HANDLING
+    # CONNECTION HANDLING
     ############################
 
-    def _do_fetch(self, api_path, destination, content_type: str="json", order: bool=False, **args) -> None:
+    def _do_fetch(self, api_path: str, destination: str, content_type: str = "json",
+                  order: bool = False, **args) -> None:
         """
         Performs a get request on the connection and commits the content to a given file.
 
@@ -372,23 +360,22 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         Returns: Union[list, dict]
             The JSON response
         """
-        if self.source is None : return
+        if self.source is None: return
 
         self.progress.debug(f"GETting {api_path} with params {args}")
         try:
             response = self.source_connection.get(api_path, **args)
         except Exception as e:
-            return # temporary
+            return  # temporary
             return self.__handle_connection_error(e)
 
         if response.ok:
             self.progress.debug(f"{response}: {'File' if content_type == 'file' else response.text}")
             return self._handle_fetch_response(response, destination, content_type, order)
         else:
-            return #temporary
+            return  # temporary
 
         self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
-
 
     def _do_push(self, api_path: str, data) -> None:
         """
@@ -423,8 +410,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return
 
-        self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}")) #pylint: disable=line-too-long
-
+        self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
 
     def _handle_fetch_response(self, response, destination: Path, content_type: str, order: bool):
         """
@@ -466,7 +452,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             with open(destination / filename, "wb") as f:
                 f.write(response.content)
 
-
     @staticmethod
     def __connection_class(server_def):
         """
@@ -484,9 +469,8 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return HTTPConnection
 
-
     ############################
-    ## INDEX
+    # INDEX
     ############################
 
     def _index(self, structure: dict, parents: dict = {}, **kwargs):
@@ -509,7 +493,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         for _i, (resource_name, definition) in enumerate(structure.items()):
             config = definition.get("index")
 
-            if config == False: #pylint: disable=singleton-comparison
+            if config is False:
                 continue
             if not config:
                 config = {}
@@ -535,10 +519,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                         new_parents = parents.copy()
                         new_parents[resource_name] = thing
                         new_parents[resource_name]["progress_key"] = definition.get("progress_key")
-                        self._index({ child_name: child_structure }, new_parents)
+                        self._index({child_name: child_structure}, new_parents)
 
             self.__increment_progress(parents, 1, f"Indexing {resource_name} complete!")
-
 
     def _fetch_index(self, path, url, **kwargs) -> list:
         """
@@ -561,7 +544,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return self._do_fetch(url, file, order=True)
 
-
     def _index_journals(self, path, url, **kwargs) -> list:
         """
         Gets journals index.
@@ -575,7 +557,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         file.touch()
 
         return self._do_fetch(url, file, order=True, paths=path_str)
-
 
     def _index_roles(self, path, url, **kwargs):
         """
@@ -599,21 +580,20 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         new_user_keys = [d["user"]["source_record_key"] for d in roles_index if d.get("user")]
         all_user_keys = list(set(existing_user_keys + new_user_keys))
 
-        all_users_index_content = [{ "source_record_key": k, "uuid": self.__uuid(k) } for k in all_user_keys]
+        all_users_index_content = [{"source_record_key": k, "uuid": self.__uuid(k)} for k in all_user_keys]
         self._replace_file_contents(users_index, all_users_index_content)
 
         return roles_index
 
-
     ############################
-    ## FETCH
+    # FETCH
     ############################
 
     def _fetch(self, structure: dict, parents: dict = {}, **kwargs) -> None:
         for resource_name, definition in structure.items():
             config = definition.get("fetch")
 
-            if config == False: #pylint: disable=singleton-comparison
+            if config is False:
                 continue
             if not config:
                 config = {}
@@ -623,16 +603,22 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             preprocessor = self._get_preprocessor(config, self.DEFAULT_PREPROCESSOR)
             handler = self._get_handler(config, self.DEFAULT_FETCH_HANDLER)
 
+            # "Singletons" don't have indexes
             if config.get("singleton"):
                 self.__set_progress_length(parents, 1)
+
                 path = self._build_path(parents, resource_name)
-                url  = self._build_url(parents, resource_name)
+                url = self._build_url(parents, resource_name)
                 preprocessor(resource_name, definition, parents, path)
                 response = handler(path, url, resource_name, None, **kwargs)
-                self.__increment_progress(parents, 1)
+
+                self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
             else:
                 resource_stubs = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
-                self.__set_progress_length(parents, len(resource_stubs))
+                children = definition.get("children")
+                progress_length = (len(resource_stubs) * len(children)) if children else 1
+
+                self.__set_progress_length(parents, progress_length)
                 for stub in resource_stubs:
                     path = self._build_path(parents, resource_name, stub)
                     url = self._build_url(parents, resource_name, stub)
@@ -643,11 +629,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                         for child_name, child_structure in definition["children"].items():
                             new_parents = parents.copy()
                             new_parents[resource_name] = response
-                            self._fetch({ child_name: child_structure }, new_parents)
+                            self._fetch({child_name: child_structure}, new_parents)
 
                     self.__increment_progress(parents, 1)
-
-
 
     def _fetch_data(self, path, url, resource_name, _stub, **_kwargs):
         """
@@ -674,7 +658,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return self._do_fetch(url, file)
 
-
     def _extract_from_index(self, path, _url, resource_name, stub, **_kwargs):
         """
         Alternate fetch handler for resources with no detail endpoint.
@@ -687,7 +670,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         file.touch()
 
         self._replace_file_contents(file, stub)
-
 
     def _fetch_files(self, path, url, _resource_name, stub, **_kwargs):
         """
@@ -704,10 +686,10 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         return self._do_fetch(url, path, "file")
 
     ############################
-    ## PUSH
+    # PUSH
     ############################
 
-    def _push(self, structure, parents = {}, **kwargs):
+    def _push(self, structure: dict, parents: dict = {}, **kwargs):
         """
         Pushes object data to a target server.
 
@@ -734,19 +716,28 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         for _i, (resource_name, definition) in enumerate(structure.items()):
             config = definition.get("push")
 
-            if config == False: #pylint: disable=singleton-comparison
+            if config is False:
                 continue
             if not config:
                 config = {}
 
             self.__update_progress("Pushing", resource_name, definition, parents)
 
-            default_preprocessor = "_fetch_foreign_keys" if definition.get("foreign_keys") else self.DEFAULT_PREPROCESSOR
+            if definition.get("foreign_keys"):
+                default_preprocessor = "_fetch_foreign_keys"
+            else:
+                default_preprocessor = self.DEFAULT_PREPROCESSOR
+
             preprocessor = self._get_preprocessor(config, default_preprocessor)
             handler = self._get_handler(config, self.DEFAULT_PUSH_HANDLER)
 
             resource_index = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
-            self.__set_progress_length(parents, len(resource_index))
+            if definition.get("children"):
+                progress_length = len(resource_index) * (len(definition.get("children")))
+            else:
+                progress_length = 1
+
+            self.__set_progress_length(parents, progress_length)
 
             for stub in resource_index:
                 path = self._build_path(parents, resource_name, stub)
@@ -758,10 +749,9 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                     for child_name, child_structure in definition["children"].items():
                         new_parents = parents.copy()
                         new_parents[resource_name] = response
-                        self._push({ child_name: child_structure }, new_parents)
+                        self._push({child_name: child_structure}, new_parents)
 
-                self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
-
+                self.__increment_progress(parents, 1)
 
     def _fetch_foreign_keys(self, resource_name, definition, parents, path, stub):
         """
@@ -801,8 +791,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
             self._replace_file_contents(file_dir, data)
 
-
-    def _search_for_fk(self, parents: dict, fk_resource_name: str, fk_uuid: str, path: Path=None):
+    def _search_for_fk(self, parents: dict, fk_resource_name: str, fk_uuid: str, path: Path = None):
         """
         Recursive function to walk up the structure to find a foreign key record.
 
@@ -831,7 +820,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         next_path = path / next_key / next_resource["uuid"]
         return self._search_for_fk(parents_clone, fk_resource_name, fk_uuid, next_path)
 
-
     def _preprocess_assignment_responses(self, resource_name, definition, parents, path, stub):
         """
         Fetches review form element foreign keys.
@@ -851,7 +839,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                 }
 
                 self._fetch_foreign_keys(resource_name, definition, element_parents, path, stub)
-
 
     def _push_data(self, path, url, resource_name, _stub, **kwargs):
         """
@@ -881,7 +868,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             self._replace_file_contents(file, data)
         return data
 
-
     def _push_files(self, path, url, _resource_name, stub, **kwargs):
         """
         Files need to be combined with their metadata from the index, then pushed as
@@ -900,14 +886,13 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         files = [f for f in path.iterdir() if f.is_file() and f.name != "file.json"]
         file = files[0]
-        response = self._do_push(url, { "files": { "file": open(file, "rb") }, **metadata })
+        response = self._do_push(url, {"files": {"file": open(file, "rb")}, **metadata})
         if response:
             metadata["target_record_key"] = response["source_record_key"]
             self._replace_file_contents(metadata_file, metadata)
 
-
     ############################
-    ## UTILITIES
+    # UTILITIES
     ############################
 
     def _fetch_user_standalone(self, user_id):
@@ -923,24 +908,20 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         users_index_path = self.data_directory / "users" / "index.json"
         users_index = self.__load_file_data(users_index_path)
-        users_index.add({ "source_record_key": user_detail.get("source_record_key") })
+        users_index.add({"source_record_key": user_detail.get("source_record_key")})
         self._replace_file_contents(users_index_path, users_index)
-
 
     def _noop_preprocessor(self, *_args):
         """Noop, but avoids needing a bunch of conditionals if no preprocessing is needed."""
         pass
 
-
-    def _get_handler(self, config: dict = {}, fallback_method_name = None):
+    def _get_handler(self, config: dict = {}, fallback_method_name: str = None):
         method_name = config.get("handler") or fallback_method_name
         return getattr(self, method_name) if method_name else None
 
-
-    def _get_preprocessor(self, config: dict = {}, fallback_method_name = None):
+    def _get_preprocessor(self, config: dict = {}, fallback_method_name: str = None):
         method_name = config.get("preprocessor") or fallback_method_name
         return getattr(self, method_name) if method_name else None
-
 
     def _parent_path_segments(self, parents, key):
         """
@@ -971,7 +952,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return ret
 
-
     def _build_url(self, parents, resource_name, resource_stub=None, pk_type="source"):
         """
         Builds a URL for a given resource and its parents.
@@ -998,8 +978,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
                 ret = f"{ret}/{self.__target_pk(resource_stub)}"
         return ret
 
-
-
     def _build_path(self, parents, resource_name, resource_stub=None):
         """
         Builds a directory path for a given resource and its parents.
@@ -1020,19 +998,25 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
         for segment in segments:
             ret = ret / segment
         ret = ret / resource_name
-        if resource_stub : ret = ret / resource_stub["uuid"]
+        if resource_stub: ret = ret / resource_stub["uuid"]
         return ret
 
+    # Progress
 
-    ## Progress
-
-    def __update_progress(self, action, resource_name, structure, parents, progress_length = None):
+    def __update_progress(self, action: str, resource_name: str,
+                          structure: dict, parents: dict,
+                          progress_length: int = None) -> None:
         """
         Updates the progress reporter.
 
         If the action, resource_name, and parents of the object are the same as the last update,
         do not create new progress bars. In this case, simply update progress length, progress,
         and message, as necessary.
+
+        This method examines the structure of the object being acted on and determines how best
+        to display progress for it. Generally, progress will only update up to 3 levels deep.
+        Beyond that, the progress bar label will be updated, but the progress will not update
+        until the 3rd-deep-level object is finished processing.
 
         Parameters:
             action: str
@@ -1044,15 +1028,10 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             parents: dict
                 Resources under which the current resource is nested
         """
-        message_parts = [action, resource_name]
+        current_depth = len(parents)
+        total_depth = self.__get_structure_depth(structure, current_depth)
 
-        if len(parents) : message_parts.extend(["for"])
-        for i, (parent_name, parent) in enumerate(parents.items()):
-            if i > 0:
-                item_name = parent.get(parent.get("progress_key") or "source_record_key").split(":")[-1]
-                message_parts.extend([self.inflector.singularize(parent_name), item_name])
-        message_parts = [x for x in message_parts if x]
-        message = " ".join(message_parts)
+        message = self.__build_progress_message(action, resource_name, parents)
 
         if not progress_length:
             if structure.get("children"):
@@ -1060,30 +1039,72 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             else:
                 progress_length = 1
 
-        if len(parents) == 0:
+        if current_depth == 0:
             self.minor_progress = -1
             self.progress.major(message, progress_length)
-        elif len(parents) == 1:
+        if current_depth == 1 or total_depth == 0:
             self.detail_progress = 0
             self.minor_progress = self.minor_progress + 1
             self.progress.minor(self.minor_progress, message, progress_length)
-        elif len(parents) == 2:
+        if current_depth > 1:
             self.progress.detail(self.detail_progress, message)
-        else:
-            self.progress.detail(self.detail_progress, message)
-
 
     def __increment_progress(self, parents, amount: int = 0, message: str = None) -> None:
-        if len(parents) <= 2:
+        if len(parents) < 3:
             self.detail_progress = (self.detail_progress if hasattr(self, "detail_progress") else 0) + amount
 
         self.progress.detail(self.detail_progress, message)
 
-
     def __set_progress_length(self, parents, length):
-        if len(parents) < 2 and  hasattr(self.progress, "progressbar"):
+        if len(parents) < 2 and hasattr(self.progress, "progressbar"):
             self.progress.progressbar.length = length
 
+    def __get_structure_depth(self, structure: dict, current_depth: int = 0) -> int:
+        """
+        Calculates the deepest resource tree depth in a structure dict.
+
+        Parameters:
+            structure: dict
+                The structure to analyze
+            current_depth: int
+                The starting value for depth
+
+        Returns: int
+            The depth of the deepest resource tree in structure
+        """
+        children = structure.get("children")
+
+        if children:
+            current_depth = max(current_depth, len(children))
+            for _child_name, child_structure in children.items():
+                current_depth = self.__get_structure_depth(child_structure, current_depth)
+
+        return current_depth
+
+    def __build_progress_message(self, action: str, resource_name: str, parents: dict) -> str:
+        """
+        Builds a progress message for the current operation.
+
+        Parameters:
+            action: str
+                The current top-level action
+            resource_name: str
+                The name of the current resource being acted upon
+            parents: dict
+                Ordered dict of objects to which the current resource belongs
+
+        Returns: str
+            The progress message
+        """
+        message_parts = [action, resource_name]
+
+        if len(parents): message_parts.extend(["for"])
+
+        for i, (parent_name, parent) in enumerate(parents.items()):
+            item_name = parent.get(parent.get("progress_key") or "source_record_key").split(":")[-1]
+            message_parts.extend([self.inflector.singularize(parent_name), item_name])
+        message_parts = [x for x in message_parts if x]
+        return " ".join(message_parts)
 
     @staticmethod
     def __source_pk(object_dict: dict) -> str:
@@ -1102,7 +1123,6 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return None
 
-
     @staticmethod
     def __target_pk(object_dict: dict) -> str:
         """
@@ -1120,14 +1140,12 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return None
 
-
     @staticmethod
     def __load_file_data(path):
         with open(path) as file:
             return json.loads(file.read())
 
         return None
-
 
     def __assign_uuids(self, data):
         if type(data) is list:
@@ -1139,10 +1157,8 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
             for (_key, value) in data.items():
                 self.__assign_uuids(value)
 
-
     def __uuid(self, key):
         return str(uuid.uuid5(self.uuid, key))
-
 
     def __structure_depth(self, structure: dict) -> int:
         ret = 0
@@ -1155,7 +1171,7 @@ class TransferHandler: #pylint: disable=too-many-instance-attributes
 
         return ret
 
-    ## Error Handling
+    # Error Handling
 
     def __handle_connection_error(self, error: Exception):
         # self.progress.error(error, fatal=True)

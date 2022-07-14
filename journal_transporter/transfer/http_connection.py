@@ -1,10 +1,11 @@
 """Handler for HTTP connections to host servers. Subclass of AbstractConnection."""
 
-import json, requests
+import requests
 
-from typing import Union, Any
+from typing import Union
 
 from journal_transporter.transfer.abstract_connection import AbstractConnection
+
 
 class HTTPConnection(AbstractConnection):
 
@@ -25,7 +26,6 @@ class HTTPConnection(AbstractConnection):
         request_opts = self.__build_get_params(params)
         response = requests.get(url, **request_opts)
         return response
-
 
     def post(self, path: str, data) -> dict:
         """
@@ -53,7 +53,6 @@ class HTTPConnection(AbstractConnection):
 
         return response
 
-
     # Private
 
     def __build_get_params(self, params: dict = None) -> dict:
@@ -62,8 +61,7 @@ class HTTPConnection(AbstractConnection):
             "params": params
         }
 
-        return { k:v for (k,v) in ret.items() if v is not None }
-
+        return {k: v for (k, v) in ret.items() if v is not None}
 
     def __build_post_params(self, params: dict = None) -> dict:
         files = params.pop("files") if "files" in params else None
@@ -75,8 +73,7 @@ class HTTPConnection(AbstractConnection):
             data_key: params
         }
 
-        return { k:v for (k,v) in ret.items() if v is not None }
-
+        return {k: v for (k, v) in ret.items() if v is not None}
 
     def __credentials(self) -> dict:
         """
@@ -85,5 +82,5 @@ class HTTPConnection(AbstractConnection):
         Returns: dict
             The auth dict to possibly be included in the request.
         """
-        if self.username is None : return {}
-        return { "auth": (self.username, self.password) }
+        if self.username is None: return {}
+        return {"auth": (self.username, self.password)}

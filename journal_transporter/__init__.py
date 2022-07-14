@@ -26,6 +26,7 @@ ERRORS = {
     ID_ERROR: "id error"
 }
 
+
 # The following permits async functions to be run as synchronous functions that Typer supports
 # See https://github.com/tiangolo/typer/issues/88#issuecomment-926302761
 
@@ -54,6 +55,7 @@ def async_command(app, *args, **kwargs):
         return async_func
 
     return decorator
+
 
 # as a method injection, app will be replaced as self
 # making the syntax exactly the same as it used to be.
