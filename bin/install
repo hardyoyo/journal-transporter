@@ -10,18 +10,19 @@ while [[ $PWD != '/' && ${PWD##*/} != 'journal_transporter' ]]; do cd ..; done
 
 printf "Creating Python virtual environment and installing requirements. Please wait..."
 
-# Setup venv and install required modules
-python3 -m venv ./.venv
-source ./.venv/bin/activate
-python -m pip install -r requirements.txt
+# Install pipenv
+pip3 install pipx pipenv
+
+# Install required modules
+pipenv install
 
 # Initialize CLI app
-python -m journal_transporter init "$@" > /dev/null
+pipenv run python -m journal_transporter init "$@" > /dev/null
 
 printf "\n$(tput setaf 2)Journal Transporter CLI Application initialized!$(tput sgr0)\n\n"
-printf "$(tput setaf 5)You can now invoke the application with bin/jt <CMD> or by activating your virtual environment and running pythom -m journal_transporter <CMD>$(tput sgr0)\n\n"
+printf "$(tput setaf 5)You can now invoke the application with bin/journal-transporter <CMD> or by activating your virtual environment and running pythom -m journal_transporter <CMD>$(tput sgr0)\n\n"
 
 # Add shortcut /usr/local/bin so it can be executed from anywhere as jt
 ln -s $dir_path/journal-transporter /usr/local/bin/journal-transporter
 
-python -m journal_transporter --help
+pipenv run python -m journal_transporter --help

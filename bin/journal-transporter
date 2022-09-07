@@ -8,8 +8,5 @@ cd "$dir_path"
 # cd up until we find (what is most likely) the CLI app folder
 while [[ $PWD != '/' && ${PWD##*/} != 'journal_transporter' ]]; do cd ..; done
 
-# Activate virtual env
-source .venv/bin/activate
-
 # Exexcute CLI command
-python -m journal_transporter "$@"
+pipenv run python -m journal_transporter "$@"
