@@ -522,9 +522,13 @@ async def transfer(
 
     abort_if_errors(errors)
 
-    message = (f"You are about to transfer {len(journals) or 'ALL'} journal(s) from"
-               f"{f'server `{source}`' if source else 'local storage'} to"
-               f"{f'server `{target}`' if target else 'local storage'}. Are you sure?")
+    message = " ".join([
+        f"You are about to transfer {len(journals) or 'ALL'} journal(s) from",
+        f"{f'server `{source}`' if source and not push_only else 'local storage'} to",
+        f"{f'server `{target}`' if (target and not (index_only or fetch_only)) else 'local storage'}.",
+        "Are you sure?"
+    ])
+
     if not force: confirm(message)
 
     transfer_methods = []
