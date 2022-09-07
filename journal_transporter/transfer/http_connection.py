@@ -2,27 +2,29 @@
 
 import requests
 
-from typing import Union
+from typing import Any, Union
 
 from journal_transporter.transfer.abstract_connection import AbstractConnection
 
 
 class HTTPConnection(AbstractConnection):
 
-    def get(self, path: str, **params) -> Union[list, dict]:
+    def get(self, path: str, is_absolute: bool = False, **params) -> Union[list, dict]:
         """
         Submits a GET request to the connection.
 
         Parameters:
             path: str
                 The path to be appended to the server's "host" value
+            is_absolute: bool
+                Is the URL absolute? If false, it will be combined with the host to build a full URL.
             params: dict
                 Arbitrary parameters to be submitted as URL params
 
         Returns: Union[list, dict]
             The response JSON.
         """
-        url = f"{self.host.strip('/')}/{path.strip('/')}"
+        url = path if is_absolute else f"{self.host.strip('/')}/{path.strip('/')}"
         request_opts = self.__build_get_params(params)
         response = requests.get(url, **request_opts)
         return response

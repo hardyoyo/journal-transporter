@@ -12,7 +12,6 @@ import inflector
 from journal_transporter import __version__
 
 from journal_transporter.transfer.http_connection import HTTPConnection
-from journal_transporter.transfer.ssh_connection import SSHConnection
 
 from journal_transporter.progress.abstract_progress_reporter import AbstractProgressReporter
 from journal_transporter.progress.null_progress_reporter import NullProgressReporter
