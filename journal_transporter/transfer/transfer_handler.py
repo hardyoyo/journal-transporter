@@ -719,7 +719,7 @@ class TransferHandler:
         If any fields in the response are formatted as `*._file`, fetch those files.
         """
         file_keys = [k for k in data.keys() if k.endswith("_file")]
-        if(any(file_keys)):
+        if any(file_keys):
             for key in file_keys:
                 if data.get(key):
                     url = data[key].get("url")

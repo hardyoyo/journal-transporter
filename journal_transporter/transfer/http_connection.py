@@ -2,7 +2,7 @@
 
 import requests
 
-from typing import Any, Union
+from typing import Union
 
 from journal_transporter.transfer.abstract_connection import AbstractConnection
 
