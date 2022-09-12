@@ -30,9 +30,13 @@ class TransferHandler:
     STAGES = [STAGE_INDEXING, STAGE_FETCHING, STAGE_PUSHING]
 
     DEFAULT_PREPROCESSOR = "_noop_preprocessor"
+    DEFAULT_POSTPROCESSOR = "_noop_postprocessor"
+
     DEFAULT_INDEX_HANDLER = "_fetch_index"
     DEFAULT_FETCH_HANDLER = "_fetch_data"
     DEFAULT_PUSH_HANDLER = "_push_data"
+
+    DEFAULT_FETCH_POSTPROCESSOR = "_fetch_linked_files"
 
     # STRUCTURE
     # A dict that defines the resources to be indexed, fetched, and pulled, and
@@ -56,7 +60,8 @@ class TransferHandler:
             # Users are indexed as part of journals/roles in order to collect only
             # those users who have roles relevant to this transfer operation.
             "index": False,
-            # "push": False
+            "fetch": False,
+            "push": False
         },
         "journals": {
             "progress_key": "path",
@@ -114,6 +119,14 @@ class TransferHandler:
                                 "handler": "_push_files"
                             }
                         },
+                        # "log_entries": {
+                        #     "fetch": {
+                        #         "handler": "_extract_from_index"
+                        #     },
+                        #     "foreign_keys": {
+                        #         "user": "users"
+                        #     }
+                        # },
                         "revision_requests": {
                             "foreign_keys": {
                                 "editor": "users"
@@ -343,16 +356,23 @@ class TransferHandler:
     # CONNECTION HANDLING
     ############################
 
-    def _do_fetch(self, api_path: str, destination: str, content_type: str = "json",
-                  order: bool = False, **args) -> None:
+    def _do_fetch(self, url: str, destination: Path, content_type: str = "json",
+                  order: bool = False, is_url_absolute: bool = False,
+                  filename: str = None, **args) -> None:
         """
         Performs a get request on the connection and commits the content to a given file.
 
         Parameters:
-            api_path: str
-                The path to direct the connection to (URL or CLI command, perhaps).
-            file: Path
+            url: str
+                The path to direct the connection to (URL or path perhaps).
+            destination: Path
                 The path to the file to which write the response JSON.
+            content_type: str
+                Either "json" or "file"
+            order: bool
+                Should the data be ordered before being written to file (if a list)?
+            is_complete_url: bool
+                If True, url will not be parsed in the connection handler
             args: dict
                 Arbitrary kwargs to pass to the connection class.
 
@@ -361,16 +381,16 @@ class TransferHandler:
         """
         if self.source is None: return
 
-        self.progress.debug(f"GETting {api_path} with params {args}")
+        self.progress.debug(f"GETting {url} with params {args}")
         try:
-            response = self.source_connection.get(api_path, **args)
+            response = self.source_connection.get(url, is_absolute=is_url_absolute, **args)
         except Exception as e:
             return  # temporary
             return self.__handle_connection_error(e)
 
         if response.ok:
             self.progress.debug(f"{response}: {'File' if content_type == 'file' else response.text}")
-            return self._handle_fetch_response(response, destination, content_type, order)
+            return self._handle_fetch_response(response, destination, filename, content_type, order)
         else:
             return  # temporary
 
@@ -411,7 +431,7 @@ class TransferHandler:
 
         self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
 
-    def _handle_fetch_response(self, response, destination: Path, content_type: str, order: bool):
+    def _handle_fetch_response(self, response, destination: Path, filename: str, content_type: str, order: bool):
         """
         Handes response from fetching data, based on content type.
 
@@ -424,6 +444,8 @@ class TransferHandler:
                 The response from the source server
             destination: Path
                 Where the data should be placed.
+            filename: str
+                What to name the file, if content_type is 'file'
             content_type: str<json|file>
                 Determines if the content is written to a file or streamed into its own file as binary.
             order: bool
@@ -445,16 +467,22 @@ class TransferHandler:
                 self.progress.debug(f"Written to {f.name}")
 
             return content
-        elif content_type == "file" and response.headers.get("content-disposition", "").startswith("attachment"):
-            re_result = re.search("filename=(.+)", response.headers["content-disposition"])
-            filename = re_result.group(1) if re_result else "unknown_attachment"
+        elif content_type == "file":
+            if not filename:
+                content_disposition = response.headers.get("content-disposition")
+                if content_disposition:
+                    attachment_regex_result = re.search("filename=(.+)", content_disposition)
+                    filename = attachment_regex_result.group(1) if attachment_regex_result else "unknown_file"
+
             with open(destination / filename, "wb") as f:
                 f.write(response.content)
 
     @staticmethod
     def __connection_class(server_def):
         """
-        Determines the connection class to use for a server
+        Determines the connection class to use for a server.
+
+        Currently, only HTTPConnection is supported.
 
         Parameters:
             server_def: dict
@@ -463,9 +491,6 @@ class TransferHandler:
         Returns: Class<AbstractConnection>
             The class to be used for the connection
         """
-        if server_def.get("type") == "ssh":
-            return SSHConnection
-
         return HTTPConnection
 
     ############################
@@ -499,14 +524,16 @@ class TransferHandler:
 
             self.__update_progress("Indexing", resource_name, definition, parents)
 
-            preprocessor = self._get_preprocessor(config, self.DEFAULT_PREPROCESSOR)
+            preprocessor = self._get_preprocessor("index", config)
             handler = self._get_handler(config, self.DEFAULT_INDEX_HANDLER)
+            postprocessor = self._get_postprocessor("index", config)
 
             path = self._build_path(parents, resource_name)
             url = self._build_url(parents, resource_name)
 
             preprocessor(resource_name, definition, parents, path)
             response = handler(path, url, **kwargs)
+            postprocessor(resource_name, definition, parents, path, response)
 
             if response and "children" in definition:
                 progress_length = len(response) * len(definition.get("children"))
@@ -599,8 +626,9 @@ class TransferHandler:
 
             self.__update_progress("Fetching", resource_name, definition, parents)
 
-            preprocessor = self._get_preprocessor(config, self.DEFAULT_PREPROCESSOR)
+            preprocessor = self._get_preprocessor("fetch", config)
             handler = self._get_handler(config, self.DEFAULT_FETCH_HANDLER)
+            postprocessor = self._get_postprocessor("fetch", config)
 
             # "Singletons" don't have indexes
             if config.get("singleton"):
@@ -610,6 +638,7 @@ class TransferHandler:
                 url = self._build_url(parents, resource_name)
                 preprocessor(resource_name, definition, parents, path)
                 response = handler(path, url, resource_name, None, **kwargs)
+                postprocessor(resource_name, definition, parents, path, response)
 
                 self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
             else:
@@ -623,6 +652,7 @@ class TransferHandler:
                     url = self._build_url(parents, resource_name, stub)
                     preprocessor(resource_name, definition, parents, path, stub)
                     response = handler(path, url, resource_name, stub, **kwargs)
+                    if response: postprocessor(resource_name, definition, parents, path, response)
 
                     if "children" in definition:
                         for child_name, child_structure in definition["children"].items():
@@ -684,6 +714,19 @@ class TransferHandler:
 
         return self._do_fetch(url, path, "file")
 
+    def _fetch_linked_files(self, resource_name, definition, parents, path, data) -> None:
+        """
+        If any fields in the response are formatted as `*._file`, fetch those files.
+        """
+        file_keys = [k for k in data.keys() if k.endswith("_file")]
+        if(any(file_keys)):
+            for key in file_keys:
+                if data.get(key):
+                    url = data[key].get("url")
+                    filename = data[key].get("upload_name")
+                    if url:
+                        self._do_fetch(url, path, "file", is_url_absolute=True, filename=filename)
+
     ############################
     # PUSH
     ############################
@@ -722,13 +765,11 @@ class TransferHandler:
 
             self.__update_progress("Pushing", resource_name, definition, parents)
 
-            if definition.get("foreign_keys"):
-                default_preprocessor = "_fetch_foreign_keys"
-            else:
-                default_preprocessor = self.DEFAULT_PREPROCESSOR
+            default_preprocessor = "_fetch_foreign_keys" if definition.get("foreign_keys") else None
 
-            preprocessor = self._get_preprocessor(config, default_preprocessor)
+            preprocessor = self._get_preprocessor("push", config, default_preprocessor)
             handler = self._get_handler(config, self.DEFAULT_PUSH_HANDLER)
+            postprocessor = self._get_postprocessor("push", config)
 
             resource_index = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
             if definition.get("children"):
@@ -743,6 +784,7 @@ class TransferHandler:
                 url = self._build_url(parents, resource_name, pk_type="target")
                 preprocessor(resource_name, definition, parents, path, stub)
                 response = handler(path, url, resource_name, stub, **kwargs)
+                postprocessor(resource_name, definition, parents, path, response)
 
                 if "children" in definition:
                     for child_name, child_structure in definition["children"].items():
@@ -914,12 +956,28 @@ class TransferHandler:
         """Noop, but avoids needing a bunch of conditionals if no preprocessing is needed."""
         pass
 
+    def _noop_postprocessor(self, *_args):
+        """Noop, but avoids needing a bunch of conditionals if no postprocessing is needed."""
+        pass
+
     def _get_handler(self, config: dict = {}, fallback_method_name: str = None):
         method_name = config.get("handler") or fallback_method_name
         return getattr(self, method_name) if method_name else None
 
-    def _get_preprocessor(self, config: dict = {}, fallback_method_name: str = None):
+    def _get_preprocessor(self, action, config: dict = {}, fallback_method_name: str = None):
+        if not fallback_method_name:
+            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_PREPROCESSOR", None) or  # noqa: W504
+                                    getattr(self, "DEFAULT_PREPROCESSOR", None))
+
         method_name = config.get("preprocessor") or fallback_method_name
+        return getattr(self, method_name) if method_name else None
+
+    def _get_postprocessor(self, action, config: dict = {}, fallback_method_name: str = None):
+        if not fallback_method_name:
+            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_POSTPROCESSOR", None) or  # noqa: W504
+                                    getattr(self, "DEFAULT_POSTPROCESSOR", None))
+
+        method_name = config.get("postprocessor") or fallback_method_name
         return getattr(self, method_name) if method_name else None
 
     def _parent_path_segments(self, parents, key):
@@ -1095,7 +1153,7 @@ class TransferHandler:
         Returns: str
             The progress message
         """
-        message_parts = [action, resource_name]
+        message_parts = [action, resource_name.replace("_", " ")]
 
         if len(parents): message_parts.extend(["for"])
 
