@@ -941,8 +941,17 @@ class TransferHandler:
         Returns: dict
             Attributes of the object created on the target server
         """
-        file = path / f"{self.inflector.singularize(resource_name)}.json"
+        data_file_name = f"{self.inflector.singularize(resource_name)}.json"
+        file = path / data_file_name
         data = self.__load_file_data(file)
+        files = [f for f in path.iterdir() if f.is_file() and f.name != data_file_name]
+        file_data = [{f"{f.name}_file": open(f, "rb")} for f in files]
+
+        if len(file_data):
+            data["files"] = {}
+            for f_dict in file_data:
+                data["files"] = {**data["files"], **f_dict}
+
         response = self._do_push(url, data)
 
         if response:
