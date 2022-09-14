@@ -644,9 +644,9 @@ class TransferHandler:
             else:
                 resource_stubs = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
                 children = definition.get("children")
-                progress_length = (len(resource_stubs) * len(children)) if children else 1
-
+                progress_length = (len(resource_stubs) * (len(children) + 1)) if children else len(resource_stubs)
                 self.__set_progress_length(parents, progress_length)
+
                 for stub in resource_stubs:
                     path = self._build_path(parents, resource_name, stub)
                     url = self._build_url(parents, resource_name, stub)
@@ -661,6 +661,8 @@ class TransferHandler:
                             self._fetch({child_name: child_structure}, new_parents)
 
                     self.__increment_progress(parents, 1)
+
+                self.__increment_progress(parents, 0, f"Fetching {resource_name} complete!")
 
     def _fetch_data(self, path, url, resource_name, _stub, **_kwargs):
         """
@@ -1159,11 +1161,10 @@ class TransferHandler:
     def __increment_progress(self, parents, amount: int = 0, message: str = None) -> None:
         if len(parents) < 3:
             self.detail_progress = (self.detail_progress if hasattr(self, "detail_progress") else 0) + amount
-
         self.progress.detail(self.detail_progress, message)
 
     def __set_progress_length(self, parents, length):
-        if len(parents) < 2 and hasattr(self.progress, "progressbar"):
+        if hasattr(self.progress, "progressbar") and len(parents) < 2:
             self.progress.progressbar.length = length
 
     def __get_structure_depth(self, structure: dict, current_depth: int = 0) -> int:
