@@ -59,9 +59,7 @@ class TransferHandler:
         "users": {
             # Users are indexed as part of journals/roles in order to collect only
             # those users who have roles relevant to this transfer operation.
-            "index": False,
-            "fetch": False,
-            "push": False
+            "index": False
         },
         "journals": {
             "progress_key": "path",
