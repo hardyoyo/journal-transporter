@@ -36,7 +36,7 @@ class TransferHandler:
     DEFAULT_FETCH_HANDLER = "_fetch_data"
     DEFAULT_PUSH_HANDLER = "_push_data"
 
-    DEFAULT_FETCH_POSTPROCESSOR = "_fetch_linked_files"
+    DEFAULT_FETCH_POSTPROCESSOR = "_default_fetch_postprocessor"
 
     # STRUCTURE
     # A dict that defines the resources to be indexed, fetched, and pulled, and
@@ -396,7 +396,7 @@ class TransferHandler:
 
         self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
 
-    def _do_push(self, api_path: str, data) -> None:
+    def _do_push(self, api_path: str, data: dict) -> None:
         """
         Performs a post request on the connection in order to create resources on the target server.
 
@@ -698,7 +698,7 @@ class TransferHandler:
         file = path / f"{self.inflector.singularize(resource_name)}.json"
         file.touch()
 
-        self._replace_file_contents(file, stub)
+        return self._replace_file_contents(file, stub)
 
     def _fetch_files(self, path, url, _resource_name, stub, **_kwargs):
         """
@@ -723,9 +723,50 @@ class TransferHandler:
             for key in file_keys:
                 if data.get(key):
                     url = data[key].get("url")
-                    filename = data[key].get("upload_name")
                     if url:
-                        self._do_fetch(url, path, "file", is_url_absolute=True, filename=filename)
+                        self._do_fetch(url, path, "file", is_url_absolute=True, filename=key)
+
+    def _ensure_user_fks(self, resource_name, definition, parents, path, data) -> None:
+        """
+        Ensures that referenced users exist.
+
+        Because users are fetched via their role assignments, it's possible that a user may be
+        referenced in a record, but no longer has a role in the journal.
+
+        If this happens, it's required to go back and fetch this user.
+        """
+        if not definition.get("foreign_keys") or not self.source: return
+
+        user_fks = [name for name, resource in definition.get("foreign_keys").items() if resource == "users"]
+        for fk in user_fks:
+            fk_data = data.get(fk)
+            uuid = fk_data.get("uuid")
+            user_dir = self.data_directory / "users" / uuid
+            if not user_dir.exists():
+                path = self._build_path({}, "users", fk_data)
+                path.mkdir()
+                file = path / "user.json"
+                file.touch()
+                url = self._build_url({}, "users", fk_data)
+                self._do_fetch(url, file)
+
+                users_index_file = self.data_directory / "users" / "index.json"
+                users_index = self.__load_file_data(users_index_file)
+                users_index.append({
+                    "source_record_key": fk_data.get("source_record_key"),
+                    "uuid": fk_data.get("uuid")
+                })
+                self._replace_file_contents(users_index_file, users_index)
+
+    def _default_fetch_postprocessor(self, resource_name, definition, parents, path, data) -> None:
+        """
+        Fetches linked files and ensures user foreign keys.
+
+        Default postprocessor for fetching. If another postprocessor is defined, it must
+        explicitly call these methods (or this one) if these tasks are still to be performed.
+        """
+        self._fetch_linked_files(resource_name, definition, parents, path, data)
+        self._ensure_user_fks(resource_name, definition, parents, path, data)
 
     ############################
     # PUSH
