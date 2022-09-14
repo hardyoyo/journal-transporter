@@ -251,6 +251,8 @@ class TransferHandler:
             open_file.write(json.dumps(data, indent=2))
             open_file.truncate()
 
+        return data
+
     def current_stage(self) -> str:
         """Gets the current stage the transfer is in: index, fetch, or push."""
         for stage in self.STAGES:
