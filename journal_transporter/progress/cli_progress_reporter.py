@@ -79,6 +79,7 @@ class CliProgressReporter(AbstractProgressReporter):
         if fatal_error: theme = "error"
         elif error: theme = "warning"
 
+        cli.write("")
         cli.write(message, theme)
 
     # Private
@@ -94,7 +95,7 @@ class CliProgressReporter(AbstractProgressReporter):
         """
         return {
             "length": length,
-            "width": 100,
+            "width": 50,
             "fill_char": "\u25A0",
             "bar_template": "    [%(bar)s] %(info)s  - %(label)s",
             "update_min_steps": 0
