@@ -743,23 +743,23 @@ class TransferHandler:
         user_fks = [name for name, resource in definition.get("foreign_keys").items() if resource == "users"]
         for fk in user_fks:
             fk_data = data.get(fk)
-            uuid = fk_data.get("uuid")
-            user_dir = self.data_directory / "users" / uuid
-            if not user_dir.exists():
-                path = self._build_path({}, "users", fk_data)
-                path.mkdir()
-                file = path / "user.json"
-                file.touch()
-                url = self._build_url({}, "users", fk_data)
-                self._do_fetch(url, file)
+            if isinstance(fk_data, dict):
+                user_dir = self.data_directory / "users" / uuid
+                if not user_dir.exists():
+                    path = self._build_path({}, "users", fk_data)
+                    path.mkdir()
+                    file = path / "user.json"
+                    file.touch()
+                    url = self._build_url({}, "users", fk_data)
+                    self._do_fetch(url, file)
 
-                users_index_file = self.data_directory / "users" / "index.json"
-                users_index = self.__load_file_data(users_index_file)
-                users_index.append({
-                    "source_record_key": fk_data.get("source_record_key"),
-                    "uuid": fk_data.get("uuid")
-                })
-                self._replace_file_contents(users_index_file, users_index)
+                    users_index_file = self.data_directory / "users" / "index.json"
+                    users_index = self.__load_file_data(users_index_file)
+                    users_index.append({
+                        "source_record_key": fk_data.get("source_record_key"),
+                        "uuid": fk_data.get("uuid")
+                    })
+                    self._replace_file_contents(users_index_file, users_index)
 
     def _default_fetch_postprocessor(self, resource_name, definition, parents, path, data) -> None:
         """
