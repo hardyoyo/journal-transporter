@@ -1,5 +1,6 @@
 """Handler for HTTP connections to host servers. Subclass of AbstractConnection."""
 
+import json
 import requests
 
 from typing import Union
@@ -43,9 +44,9 @@ class HTTPConnection(AbstractConnection):
             The response content.
         """
         url = f"{self.host.strip('/')}/{path.strip('/')}/"
-        request_opts = self.__build_post_params(data)
-        response = None
+        request_opts = self.__build_post_params(data.copy())
 
+        response = None
         if type(data) is list:
             response = []
             for index, record in enumerate(data):
@@ -66,13 +67,18 @@ class HTTPConnection(AbstractConnection):
         return {k: v for (k, v) in ret.items() if v is not None}
 
     def __build_post_params(self, params: dict = None) -> dict:
-        files = params.pop("files") if "files" in params else None
+        files = params.get("files") if "files" in params else None
         data_key = "data" if files else "json"
+
+        data = {}
+        for key, value in params.items():
+            if not key == "files":
+                data[key] = value
 
         ret = {
             **self.__credentials(),
             "files": files,
-            data_key: params
+            data_key: {"json": json.dumps(data)} if files else data
         }
 
         return {k: v for (k, v) in ret.items() if v is not None}

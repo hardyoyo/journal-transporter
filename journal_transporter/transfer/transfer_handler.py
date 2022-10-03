@@ -727,6 +727,7 @@ class TransferHandler:
                     url = data[key].get("url")
                     if url:
                         self._do_fetch(url, path, "file", is_url_absolute=True, filename=key)
+                        data[f"{key}_filename"] = data.get("upload_name") or data.get("name")
 
     def _ensure_user_fks(self, resource_name, definition, parents, path, data) -> None:
         """
@@ -958,7 +959,7 @@ class TransferHandler:
 
         if response:
             data["target_record_key"] = response.get("source_record_key")
-            self._replace_file_contents(file, data)
+            self._replace_file_contents(file, {key: data[key] for key in data if key != 'files'})
         return data
 
     def _push_files(self, path, url, _resource_name, stub, **kwargs):
@@ -1018,16 +1019,16 @@ class TransferHandler:
 
     def _get_preprocessor(self, action, config: dict = {}, fallback_method_name: str = None):
         if not fallback_method_name:
-            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_PREPROCESSOR", None) or  # noqa: W504
-                                    getattr(self, "DEFAULT_PREPROCESSOR", None))
+            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_PREPROCESSOR", None)  # noqa: W504
+                                    or getattr(self, "DEFAULT_PREPROCESSOR", None))
 
         method_name = config.get("preprocessor") or fallback_method_name
         return getattr(self, method_name) if method_name else None
 
     def _get_postprocessor(self, action, config: dict = {}, fallback_method_name: str = None):
         if not fallback_method_name:
-            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_POSTPROCESSOR", None) or  # noqa: W504
-                                    getattr(self, "DEFAULT_POSTPROCESSOR", None))
+            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_POSTPROCESSOR", None)  # noqa: W504
+                                    or getattr(self, "DEFAULT_POSTPROCESSOR", None))
 
         method_name = config.get("postprocessor") or fallback_method_name
         return getattr(self, method_name) if method_name else None
