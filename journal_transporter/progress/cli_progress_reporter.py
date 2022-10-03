@@ -26,6 +26,8 @@ class CliProgressReporter(AbstractProgressReporter):
     # Protected
 
     def _update_interface(self) -> None:
+        if not hasattr(self, "progressbar"): return
+
         self.progressbar.label = self.message
         progress_diff = self.progress_diff if hasattr(self, "progress_diff") else 0
         self.progressbar.update(progress_diff)
