@@ -117,14 +117,14 @@ class TransferHandler:
                                 "handler": "_push_files"
                             }
                         },
-                        # "log_entries": {
-                        #     "fetch": {
-                        #         "handler": "_extract_from_index"
-                        #     },
-                        #     "foreign_keys": {
-                        #         "user": "users"
-                        #     }
-                        # },
+                        "log_entries": {
+                            "fetch": {
+                                "handler": "_extract_from_index"
+                            },
+                            "foreign_keys": {
+                                "user": "users"
+                            }
+                        },
                         "revision_requests": {
                             "foreign_keys": {
                                 "editor": "users"
