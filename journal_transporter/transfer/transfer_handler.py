@@ -744,6 +744,7 @@ class TransferHandler:
         for fk in user_fks:
             fk_data = data.get(fk)
             if isinstance(fk_data, dict):
+                uuid = fk_data.get("uuid")
                 user_dir = self.data_directory / "users" / uuid
                 if not user_dir.exists():
                     path = self._build_path({}, "users", fk_data)
