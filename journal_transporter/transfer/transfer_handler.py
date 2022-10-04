@@ -1020,16 +1020,16 @@ class TransferHandler:
 
     def _get_preprocessor(self, action, config: dict = {}, fallback_method_name: str = None):
         if not fallback_method_name:
-            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_PREPROCESSOR", None)  # noqa: W504
-                                    or getattr(self, "DEFAULT_PREPROCESSOR", None))
+            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_PREPROCESSOR", None)
+                                    or getattr(self, "DEFAULT_PREPROCESSOR", None))  # noqa: W503
 
         method_name = config.get("preprocessor") or fallback_method_name
         return getattr(self, method_name) if method_name else None
 
     def _get_postprocessor(self, action, config: dict = {}, fallback_method_name: str = None):
         if not fallback_method_name:
-            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_POSTPROCESSOR", None)  # noqa: W504
-                                    or getattr(self, "DEFAULT_POSTPROCESSOR", None))
+            fallback_method_name = (getattr(self, f"DEFAULT_{action.upper()}_POSTPROCESSOR", None)
+                                    or getattr(self, "DEFAULT_POSTPROCESSOR", None))  # noqa: W503
 
         method_name = config.get("postprocessor") or fallback_method_name
         return getattr(self, method_name) if method_name else None
