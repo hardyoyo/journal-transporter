@@ -577,7 +577,11 @@ async def transfer(
     try:
         # Verbose temporarily forced True - TODO: use verbose()
         progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose=True, debug=debug)
-        handler = TransferHandler(data_directory, source=source_def, target=target_def, progress_reporter=progress_reporter)
+        handler = TransferHandler(data_directory,
+                                  source=source_def,
+                                  target=target_def,
+                                  progress_reporter=progress_reporter
+                                  )
 
         for method_name in transfer_methods:
             method = getattr(handler, method_name)
