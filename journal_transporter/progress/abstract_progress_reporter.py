@@ -175,6 +175,9 @@ class AbstractProgressReporter(ABC):
         """
         self.update(ProgressUpdateType.DEBUG, debug_message=message)
 
+    def report_error(self, error: Exception, context: dict = {}) -> str:
+        return self._get_error_response(error, context)
+
     def error(self, message: str, fatal: bool = False) -> None:
         """
         Reports an error to the UI.

@@ -6,8 +6,14 @@ to end and create new progress bars.
 """
 # journal_transporter/progress/cli_progress_reporter.py
 
+import textwrap
+import traceback
+
+from pprint import PrettyPrinter
+
 from journal_transporter.progress.abstract_progress_reporter import AbstractProgressReporter
 from journal_transporter.progress.progress_update_type import ProgressUpdateType
+from journal_transporter.transfer.exceptions import ServerResponseError
 from journal_transporter import cli
 
 
@@ -84,6 +90,35 @@ class CliProgressReporter(AbstractProgressReporter):
         cli.write("")
         cli.write(message, theme)
 
+    def _get_error_response(self, error: Exception = None, context: dict = {}) -> str:
+        cli.write(context.get("message") or "An error has occurred:", theme="error", line_break=True)
+        cli.write(
+            error.message if hasattr(error, "message") else error.args[0],
+            theme="warning",
+            line_break="after"
+        )
+        choice = cli.prompt_with_choices(
+            "How would you like to proceed?",
+            choices={
+                "c": "Continue, ignoring error",
+                "a": "Abort",
+                "i": "View more information about this error",
+                "t": "View exception traceback"
+            }
+        )
+
+        if choice in ["c", "continue"]:
+            return "continue"
+        elif choice in ["a", "abort"]:
+            return "abort"
+        elif choice in ["i", "info"]:
+            cli.write(self.__error_info(error), line_break=True)
+            if len(context): cli.write(PrettyPrinter(indent=2).pprint(context), line_break=True)
+            self._get_error_response(error, context)
+        elif choice in ["t", "traceback"]:
+            cli.write(traceback.format_exc())
+            self._get_error_response(error, context)
+
     # Private
 
     def __progressbar_options(self, length: int) -> dict:
@@ -102,3 +137,13 @@ class CliProgressReporter(AbstractProgressReporter):
             "bar_template": "    [%(bar)s] %(info)s  - %(label)s",
             "update_min_steps": 0
         }
+
+    def __error_info(self, error: Exception) -> str:
+        if isinstance(error, ServerResponseError):
+            return textwrap.dedent(
+                f"Server returned an error response:"
+                f"Status {error.response.status_code} - {error.response.reason}"
+                f"{error.response.text}"
+            )
+        else:
+            return error.args[0]

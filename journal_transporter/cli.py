@@ -29,10 +29,12 @@ from enum import Enum
 
 import typer
 import os
+import textwrap
 
 from journal_transporter import __app_name__, __version__, ERRORS, config, database
 from journal_transporter.transfer.transfer_handler import TransferHandler
 from journal_transporter.progress.cli_progress_reporter import CliProgressReporter
+from journal_transporter.transfer.exceptions import AbortError
 
 
 class ConnectionType(str, Enum):
@@ -172,7 +174,7 @@ def write(text: str, theme: str = None, line_break: Union[str, bool] = False, **
             Arbitrary options to pass to typer.secho as kwargs.
     """
     if line_break in (True, "before", "both"): write_line_break()
-    typer.secho(f"    {text}", **color(theme), **options)
+    typer.secho(indent(text), **color(theme), **options)
     if line_break in (True, "after", "both"): write_line_break()
 
 
@@ -203,8 +205,37 @@ def write_line_break() -> None:
 
 def confirm(text: str, theme: str = "attention", abort: bool = True, **options) -> None:
     """Prints a confirmation prompt to the terminal with standardized formatting."""
-    message = typer.style(f"    {text}", **color(theme))
+    message = typer.style(indent(text), **color(theme))
     typer.confirm(message, abort=abort, **options)
+
+
+def prompt_with_choices(text: str, choices: dict, theme: str = "attention", **options) -> str:
+    """Prints a prompt with a list of options. Only accepts one of the options."""
+    choice_keys = list(choices.keys()) + ['h']
+    text_with_options = f"{text} -- Options: ({' | '.join(choice_keys)})"
+    response = prompt(text_with_options, theme, **options)
+    if response in choices.keys():
+        return response
+    elif response != 'h':
+        write("Invalid response.", theme="error")
+
+    for choice, desc in choices.items():
+        write(f"{choice} - {desc}")
+
+    write("h - help")
+    write_line_break()
+    prompt_with_choices(text, choices, theme, **options)
+
+
+def prompt(text: str, theme: str = "attention", **options) -> str:
+    """Prints a prompt and returns user response."""
+    message = typer.style(indent(text), **color(theme))
+    return typer.prompt(message, **options)
+
+
+def indent(text: str) -> str:
+    dedented = textwrap.dedent(text)
+    return textwrap.indent(dedented, " " * 4)
 
 
 def abort_if_errors(errors: list) -> None:
@@ -543,13 +574,16 @@ async def transfer(
         database.prepare(keep)
         transfer_methods = ["fetch_indexes", "fetch_data", "push_data"]
 
-    # Verbose temporarily forced True - TODO: use verbose()
-    progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose=True, debug=debug)
-    handler = TransferHandler(data_directory, source=source_def, target=target_def, progress_reporter=progress_reporter)
+    try:
+        # Verbose temporarily forced True - TODO: use verbose()
+        progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose=True, debug=debug)
+        handler = TransferHandler(data_directory, source=source_def, target=target_def, progress_reporter=progress_reporter)
 
-    for method_name in transfer_methods:
-        method = getattr(handler, method_name)
-        method(journals)
+        for method_name in transfer_methods:
+            method = getattr(handler, method_name)
+            method(journals)
+    except AbortError:
+        write("Operation aborted by user", line_break=True, theme="attention")
 
     progress_reporter.clean_up()
 

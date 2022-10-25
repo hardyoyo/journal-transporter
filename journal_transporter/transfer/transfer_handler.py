@@ -12,6 +12,7 @@ import inflector
 from journal_transporter import __version__
 
 from journal_transporter.transfer.http_connection import HTTPConnection
+from journal_transporter.transfer.exceptions import AbortError, ServerResponseError
 
 from journal_transporter.progress.abstract_progress_reporter import AbstractProgressReporter
 from journal_transporter.progress.null_progress_reporter import NullProgressReporter
@@ -385,16 +386,27 @@ class TransferHandler:
         try:
             response = self.source_connection.get(url, is_absolute=is_url_absolute, **args)
         except Exception as e:
-            return  # temporary
-            return self.__handle_connection_error(e)
+            context = {
+                "message": "An error has occurred while attempting to fetch data",
+                "server": self.source,
+                "url": url,
+                "content_type": content_type,
+                "destination_file": str(destination)
+            }
+            return self.__handle_error(e, context)
 
         if response.ok:
             self.progress.debug(f"{response}: {'File' if content_type == 'file' else response.text}")
             return self._handle_fetch_response(response, destination, filename, content_type, order)
-        else:
-            return  # temporary
 
-        self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
+        context = {
+            "message": "A server has returned an error response",
+            "server": self.source,
+            "url": url,
+            "content_type": content_type,
+            "destination_file": str(destination)
+        }
+        self.__handle_error(ServerResponseError(f"HTTP {response.status_code}: {response.text}"), context)
 
     def _do_push(self, api_path: str, data: dict) -> None:
         """
@@ -417,19 +429,26 @@ class TransferHandler:
         try:
             response = self.target_connection.post(api_path, data)
         except Exception as e:
-            return
-            return self.__handle_connection_error(e)
+            context = {
+                "message": "An error has occurred while attempting to push data",
+                "server": self.target,
+                "url": api_path,
+                "data": data
+            }
+            return self.__handle_error(e, context)
 
         self.progress.debug(f"{response}: {response.text}")
 
         if response.ok:
             return response.json()
-        if response.status_code < 500:
-            return
 
-        return
-
-        self.__handle_connection_error(ConnectionError(f"HTTP {response.status_code}: {response.text}"))
+        context = {
+            "message": "A server has returned an error response",
+            "server": self.target,
+            "url": api_path,
+            "data": data
+        }
+        self.__handle_error(ServerResponseError(f"HTTP {response.status_code}: {response.text}", response), context)
 
     def _handle_fetch_response(self, response, destination: Path, filename: str, content_type: str, order: bool):
         """
@@ -531,9 +550,17 @@ class TransferHandler:
             path = self._build_path(parents, resource_name)
             url = self._build_url(parents, resource_name)
 
-            preprocessor(resource_name, definition, parents, path)
-            response = handler(path, url, **kwargs)
-            postprocessor(resource_name, definition, parents, path, response)
+            try:
+                preprocessor(resource_name, definition, parents, path)
+                response = handler(path, url, **kwargs)
+                postprocessor(resource_name, definition, parents, path, response)
+            except BaseException as err:
+                self.__handle_error(err, {
+                    "message": f"An error occurred while indexing {resource_name}",
+                    "resource_name": resource_name,
+                    "parents": parents,
+                    "path": path
+                })
 
             if response and "children" in definition:
                 progress_length = len(response) * len(definition.get("children"))
@@ -636,9 +663,17 @@ class TransferHandler:
 
                 path = self._build_path(parents, resource_name)
                 url = self._build_url(parents, resource_name)
-                preprocessor(resource_name, definition, parents, path)
-                response = handler(path, url, resource_name, None, **kwargs)
-                postprocessor(resource_name, definition, parents, path, response)
+                try:
+                    preprocessor(resource_name, definition, parents, path)
+                    response = handler(path, url, resource_name, None, **kwargs)
+                    postprocessor(resource_name, definition, parents, path, response)
+                except BaseException as err:
+                    self.__handle_error(err, {
+                        "message": f"An error occurred while fetching {resource_name}",
+                        "resource_name": resource_name,
+                        "parents": parents,
+                        "path": path
+                    })
 
                 self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
             else:
@@ -650,9 +685,18 @@ class TransferHandler:
                 for stub in resource_stubs:
                     path = self._build_path(parents, resource_name, stub)
                     url = self._build_url(parents, resource_name, stub)
-                    preprocessor(resource_name, definition, parents, path, stub)
-                    response = handler(path, url, resource_name, stub, **kwargs)
-                    if response: postprocessor(resource_name, definition, parents, path, response)
+
+                    try:
+                        preprocessor(resource_name, definition, parents, path, stub)
+                        response = handler(path, url, resource_name, stub, **kwargs)
+                        if response: postprocessor(resource_name, definition, parents, path, response)
+                    except BaseException as err:
+                        self.__handle_error(err, {
+                            "message": f"An error occurred while fetching {resource_name}",
+                            "resource_name": resource_name,
+                            "parents": parents,
+                            "path": path
+                        })
 
                     if "children" in definition:
                         for child_name, child_structure in definition["children"].items():
@@ -660,9 +704,7 @@ class TransferHandler:
                             new_parents[resource_name] = response
                             self._fetch({child_name: child_structure}, new_parents)
 
-                    self.__increment_progress(parents, 1)
-
-                self.__increment_progress(parents, 0, f"Fetching {resource_name} complete!")
+                self.__increment_progress(parents, 1, f"Fetching {resource_name} complete!")
 
     def _fetch_data(self, path, url, resource_name, _stub, **_kwargs):
         """
@@ -820,16 +862,24 @@ class TransferHandler:
             if definition.get("children"):
                 progress_length = len(resource_index) * (len(definition.get("children")))
             else:
-                progress_length = 1
+                progress_length = len(resource_index)
 
             self.__set_progress_length(parents, progress_length)
 
             for stub in resource_index:
-                path = self._build_path(parents, resource_name, stub)
-                url = self._build_url(parents, resource_name, pk_type="target")
-                preprocessor(resource_name, definition, parents, path, stub)
-                response = handler(path, url, resource_name, stub, **kwargs)
-                postprocessor(resource_name, definition, parents, path, response)
+                try:
+                    path = self._build_path(parents, resource_name, stub)
+                    url = self._build_url(parents, resource_name, pk_type="target")
+                    preprocessor(resource_name, definition, parents, path, stub)
+                    response = handler(path, url, resource_name, stub, **kwargs)
+                    postprocessor(resource_name, definition, parents, path, response)
+                except BaseException as err:
+                    self.__handle_error(err, {
+                        "message": f"An error occurred while pushing {resource_name}",
+                        "resource_name": resource_name,
+                        "parents": parents,
+                        "resource": stub
+                    })
 
                 if "children" in definition:
                     for child_name, child_structure in definition["children"].items():
@@ -838,6 +888,8 @@ class TransferHandler:
                         self._push({child_name: child_structure}, new_parents)
 
                 self.__increment_progress(parents, 1)
+
+            self.__increment_progress(parents, 0, f"Done pushing {resource_name}!")
 
     def _fetch_foreign_keys(self, resource_name, definition, parents, path, stub):
         """
@@ -873,7 +925,8 @@ class TransferHandler:
                             fk_file_path = self._search_for_fk(parents, fk_resource, fk_uuid)
                             if fk_file_path.exists():
                                 fk_data = self.__load_file_data(fk_file_path)
-                                fk_dict["target_record_key"] = fk_data.get("target_record_key")
+                                if fk_data:
+                                    fk_dict["target_record_key"] = fk_data.get("target_record_key")
 
             self._replace_file_contents(file_dir, data)
 
@@ -1283,10 +1336,13 @@ class TransferHandler:
 
     # Error Handling
 
-    def __handle_connection_error(self, error: Exception):
-        # self.progress.error(error, fatal=True)
-        raise error
+    def __handle_error(self, error: Exception, context: str = {}):
+        if isinstance(error, AbortError):
+            raise error
 
+        user_action = self.progress.report_error(error, context)
 
-class ConnectionError(Exception):
-    pass
+        if user_action == "abort":
+            raise AbortError("User aborted operation")
+        elif user_action == "continue":
+            pass
