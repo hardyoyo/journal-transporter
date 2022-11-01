@@ -174,7 +174,8 @@ def write(text: str, theme: str = None, line_break: Union[str, bool] = False, **
             Arbitrary options to pass to typer.secho as kwargs.
     """
     if line_break in (True, "before", "both"): write_line_break()
-    typer.secho(indent(text), **color(theme), **options)
+    if text:
+        typer.secho(indent(text), **color(theme), **options)
     if line_break in (True, "after", "both"): write_line_break()
 
 
@@ -234,8 +235,9 @@ def prompt(text: str, theme: str = "attention", **options) -> str:
 
 
 def indent(text: str) -> str:
-    dedented = textwrap.dedent(text)
-    return textwrap.indent(dedented, " " * 4)
+    if text:
+        dedented = textwrap.dedent(text)
+        return textwrap.indent(dedented, " " * 4)
 
 
 def abort_if_errors(errors: list) -> None:
@@ -505,7 +507,7 @@ async def transfer(
     fetch_only: Optional[bool] = typer.Option(
         False,
         "--fetch-only",
-        help="If true, only fetch data and do not transfer to target server."
+        help="If true, only fetch already-indexed data and do not transfer to target server."
     ),
     push_only: Optional[bool] = typer.Option(
         False,
