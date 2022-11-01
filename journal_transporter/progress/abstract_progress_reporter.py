@@ -31,7 +31,9 @@ There is also the DEBUG type, which does not display progress bars, but instead 
 from abc import ABC, abstractmethod
 from typing import Any
 from datetime import datetime
+from pathlib import Path
 
+import journal_transporter.database as database
 from journal_transporter.progress.progress_update_type import ProgressUpdateType
 
 
@@ -93,7 +95,7 @@ class AbstractProgressReporter(ABC):
         """
         if self.debug_mode:
             # If debug mode is on, skip the progress bars and just print the message.
-            self._handle_debug(debug_message or message, update_type)
+            return self._handle_debug(debug_message or message, update_type)
         elif update_type is not ProgressUpdateType.DEBUG:
             if update_type is ProgressUpdateType.MAJOR:
                 if self.verbose_mode:
@@ -119,6 +121,9 @@ class AbstractProgressReporter(ABC):
                 if progress: self.set_progress(weighted_progress)
                 if message and self.verbose_mode: self.set_message(message)
                 self._update_interface()
+
+        if self.log_debug:
+            self._log_debug(debug_message or message)
 
     def major(self, message: str = None, length: int = 100, debug_message: str = None) -> None:
         """
@@ -278,7 +283,24 @@ class AbstractProgressReporter(ABC):
             message: str
                 The message to be printed.
         """
-        if message: self._print_message(f"{self._now()} -- {message}")
+        if self.debug_mode and message:
+            debug_text = f"{self._now()} -- {message}"
+            self._print_message(debug_text)
+
+
+    def _log_debug(self, message):
+        if self.log_debug and message:
+            debug_text = f"{self._now()} -- {message}"
+            with open(self._get_debug_log(), "a") as log:
+                log.write(debug_text + "\n")
+
+    def _get_debug_log(self):
+        if hasattr(self, "debug_log"): return self.debug_log
+
+        log_path = Path(database.get_database_path()) / "debug_log.txt"
+        log_path.touch()
+        self.debug_log = log_path
+        return log_path
 
     @abstractmethod
     def _print_message(self, message: str, **kwargs) -> None:

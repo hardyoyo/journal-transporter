@@ -526,6 +526,11 @@ async def transfer(
         "--debug",
         help="Enable debug output"
     ),
+    log: Optional[bool] = typer.Option(
+        False,
+        "--log",
+        help="Log debug output to file"
+    ),
     force: Optional[bool] = typer.Option(
         False,
         "--force",
@@ -578,7 +583,12 @@ async def transfer(
 
     try:
         # Verbose temporarily forced True - TODO: use verbose()
-        progress_reporter = CliProgressReporter(typer, init_message="Initializing...", verbose=True, debug=debug)
+        progress_reporter = CliProgressReporter(typer,
+                                                init_message="Initializing...",
+                                                verbose=True,
+                                                debug=debug,
+                                                log=log
+                                                )
         handler = TransferHandler(data_directory,
                                   source=source_def,
                                   target=target_def,
