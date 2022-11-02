@@ -61,6 +61,7 @@ class AbstractProgressReporter(ABC):
         self.interface = interface
         self.debug_mode = debug
         self.log_debug = log
+        self.log_file = None
         self.verbose_mode = True
         self.progress = start
         self.message = init_message
@@ -287,20 +288,18 @@ class AbstractProgressReporter(ABC):
             debug_text = f"{self._now()} -- {message}"
             self._print_message(debug_text)
 
-
     def _log_debug(self, message):
-        if self.log_debug and message:
+        """
+        Writes to the debug log.
+
+        Parameters:
+            message: str
+                The message to be written.
+        """
+        if self.log_debug and self.log_file and message:
             debug_text = f"{self._now()} -- {message}"
-            with open(self._get_debug_log(), "a") as log:
+            with open(self.log_file, "a") as log:
                 log.write(debug_text + "\n")
-
-    def _get_debug_log(self):
-        if hasattr(self, "debug_log"): return self.debug_log
-
-        log_path = Path(database.get_database_path()) / "debug_log.txt"
-        log_path.touch()
-        self.debug_log = log_path
-        return log_path
 
     @abstractmethod
     def _print_message(self, message: str, **kwargs) -> None:

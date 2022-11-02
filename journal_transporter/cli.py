@@ -531,6 +531,11 @@ async def transfer(
         "--log",
         help="Log debug output to file"
     ),
+    resume: Optional[bool] = typer.Option(
+        False,
+        "--resume",
+        help="Resume from where the last process ended, if applicable"
+    ),
     force: Optional[bool] = typer.Option(
         False,
         "--force",
@@ -571,14 +576,14 @@ async def transfer(
 
     transfer_methods = []
     if index_only:
-        database.prepare(keep)
+        if not resume: database.prepare(keep)
         transfer_methods = transfer_methods + ["fetch_indexes"]
     elif fetch_only:
         transfer_methods = transfer_methods + ["fetch_data"]
     elif push_only:
         transfer_methods = transfer_methods + ["push_data"]
     else:
-        database.prepare(keep)
+        if not resume: database.prepare(keep)
         transfer_methods = ["fetch_indexes", "fetch_data", "push_data"]
 
     try:
@@ -592,7 +597,8 @@ async def transfer(
         handler = TransferHandler(data_directory,
                                   source=source_def,
                                   target=target_def,
-                                  progress_reporter=progress_reporter
+                                  progress_reporter=progress_reporter,
+                                  resume=resume
                                   )
 
         for method_name in transfer_methods:

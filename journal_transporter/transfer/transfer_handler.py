@@ -170,7 +170,7 @@ class TransferHandler:
     def __init__(
         self, data_directory: str, source: dict = None, target: dict = None,
         progress_reporter: AbstractProgressReporter = NullProgressReporter(None),
-        dry_run: bool = False, **options
+        dry_run: bool = False, resume: bool = False, **options
     ):
         """
         Parameters:
@@ -192,7 +192,10 @@ class TransferHandler:
         self.source_connection = self.__connection_class(source)(**self.source) if source is not None else None
         self.target_connection = self.__connection_class(target)(**self.target) if target is not None else None
         self.inflector = inflector.English()
+        self.error_context = None
+        self.resume = resume
         if not dry_run: self.initialize_data_directory()
+        if self.progress.log_debug: self.initialize_debug_log()
         assert self.metadata
         assert self.uuid
 
@@ -220,6 +223,11 @@ class TransferHandler:
 
             with open(self.metadata_file, "w") as file:
                 file.write(json.dumps(self.metadata))
+
+    def initialize_debug_log(self):
+        file_path = self.data_directory.parents[0] / f"log_{self.uuid}.txt"
+        file_path.touch()
+        self.progress.log_file = file_path
 
     def finalize(self) -> None:
         pass
@@ -386,27 +394,27 @@ class TransferHandler:
         try:
             response = self.source_connection.get(url, is_absolute=is_url_absolute, **args)
         except Exception as e:
-            context = {
+            self.error_context = {
                 "message": "An error has occurred while attempting to fetch data",
                 "server": self.source,
                 "url": url,
                 "content_type": content_type,
                 "destination_file": str(destination)
             }
-            return self.__handle_error(e, context)
+            raise e
 
         if response.ok:
             self.progress.debug(f"{response}: {'File' if content_type == 'file' else response.text}")
             return self._handle_fetch_response(response, destination, filename, content_type, order)
 
-        context = {
+        self.error_context = {
             "message": "A server has returned an error response",
             "server": self.source,
             "url": url,
             "content_type": content_type,
             "destination_file": str(destination)
         }
-        self.__handle_error(ServerResponseError(f"HTTP {response.status_code}: {response.text}"), context)
+        raise ServerResponseError(f"HTTP {response.status_code}: {response.text}")
 
     def _do_push(self, api_path: str, data: dict) -> None:
         """
@@ -479,6 +487,14 @@ class TransferHandler:
             if order and (type(content) is list):
                 content = sorted(content, key=lambda d: d["source_record_key"])
 
+            # Allow blank arrays and objects, but if the server responds with a blank file, trouble
+            if content in [None, ""]:
+                self.error_context = {
+                    "url": response.url,
+                    "content_type": content_type
+                }
+                raise ServerResponseError("Server returned a blank response", response)
+
             data = json.dumps(content, indent=2)
 
             with open(destination, "w") as f:
@@ -549,12 +565,20 @@ class TransferHandler:
 
             path = self._build_path(parents, resource_name)
             url = self._build_url(parents, resource_name)
+            response = None
 
             try:
-                preprocessor(resource_name, definition, parents, path)
-                response = handler(path, url, **kwargs)
-                postprocessor(resource_name, definition, parents, path, response)
-            except BaseException as err:
+                if self.resume and (path / "index.json").exists():
+                    with open((path / "index.json"), "r") as file:
+                        content = file.read()
+                        if content:
+                            response = json.loads(content)
+
+                if not response:
+                    preprocessor(resource_name, definition, parents, path)
+                    response = handler(path, url, **kwargs)
+                    postprocessor(resource_name, definition, parents, path, response)
+            except Exception as err:
                 self.__handle_error(err, {
                     "message": f"An error occurred while indexing {resource_name}",
                     "resource_name": resource_name,
@@ -567,7 +591,7 @@ class TransferHandler:
                 self.__set_progress_length(parents, progress_length)
                 for thing in response:
                     thing_path = path / thing["uuid"]
-                    thing_path.mkdir()
+                    thing_path.mkdir(exist_ok=True)
                     for _j, (child_name, child_structure) in enumerate(definition["children"].items()):
                         new_parents = parents.copy()
                         new_parents[resource_name] = thing
@@ -593,6 +617,11 @@ class TransferHandler:
         """
         path.mkdir(exist_ok=True)
         file = path / "index.json"
+
+        if self.resume and file.exists():
+            content = self.__load_file_data(file)
+            if content: return content
+
         file.touch()
 
         return self._do_fetch(url, file, order=True)
@@ -607,6 +636,11 @@ class TransferHandler:
 
         path.mkdir(exist_ok=True)
         file = path / "index.json"
+
+        if self.resume and file.exists():
+            content = self.__load_file_data(file)
+            if content: return content
+
         file.touch()
 
         return self._do_fetch(url, file, order=True, paths=path_str)
@@ -663,11 +697,13 @@ class TransferHandler:
 
                 path = self._build_path(parents, resource_name)
                 url = self._build_url(parents, resource_name)
+                response = None
+
                 try:
                     preprocessor(resource_name, definition, parents, path)
                     response = handler(path, url, resource_name, None, **kwargs)
-                    postprocessor(resource_name, definition, parents, path, response)
-                except BaseException as err:
+                    if response: postprocessor(resource_name, definition, parents, path, response)
+                except Exception as err:
                     self.__handle_error(err, {
                         "message": f"An error occurred while fetching {resource_name}",
                         "resource_name": resource_name,
@@ -685,20 +721,21 @@ class TransferHandler:
                 for stub in resource_stubs:
                     path = self._build_path(parents, resource_name, stub)
                     url = self._build_url(parents, resource_name, stub)
+                    response = None
 
                     try:
                         preprocessor(resource_name, definition, parents, path, stub)
                         response = handler(path, url, resource_name, stub, **kwargs)
                         if response: postprocessor(resource_name, definition, parents, path, response)
-                    except BaseException as err:
+                    except Exception as err:
                         self.__handle_error(err, {
                             "message": f"An error occurred while fetching {resource_name}",
                             "resource_name": resource_name,
-                            "parents": parents,
+                            "parent_resources": parents,
                             "path": path
                         })
 
-                    if "children" in definition:
+                    if response and "children" in definition:
                         for child_name, child_structure in definition["children"].items():
                             new_parents = parents.copy()
                             new_parents[resource_name] = response
@@ -727,6 +764,10 @@ class TransferHandler:
         """
         path.mkdir(exist_ok=True)
         file = path / f"{self.inflector.singularize(resource_name)}.json"
+
+        if self.resume and file.exists():
+            return self.__load_file_data(file)
+
         file.touch()
 
         return self._do_fetch(url, file)
@@ -740,6 +781,11 @@ class TransferHandler:
         """
         path.mkdir(exist_ok=True)
         file = path / f"{self.inflector.singularize(resource_name)}.json"
+
+        if self.resume and file.exists():
+            data = self.__load_file_data(file)
+            if data: return data
+
         file.touch()
 
         return self._replace_file_contents(file, stub)
@@ -753,10 +799,16 @@ class TransferHandler:
         """
         path.mkdir(exist_ok=True)
         file = path / "file.json"
+
+        if self.resume and file.exists() and len(list(path.glob("*"))) == 2:
+            metadata = self.__load_file_data(file)
+            if metadata: return metadata
+
         file.touch()
         self._replace_file_contents(file, stub)
 
-        return self._do_fetch(url, path, "file")
+        self._do_fetch(url, path, "file")
+        return stub
 
     def _fetch_linked_files(self, resource_name, definition, parents, path, data) -> None:
         """
@@ -765,11 +817,12 @@ class TransferHandler:
         file_keys = [k for k in data.keys() if k.endswith("_file")]
         if any(file_keys):
             for key in file_keys:
-                if data.get(key):
-                    url = data[key].get("url")
-                    if url:
-                        self._do_fetch(url, path, "file", is_url_absolute=True, filename=key)
-                        data[f"{key}_filename"] = data.get("upload_name") or data.get("name")
+                if isinstance(data.get(key), dict):
+                    if not (self.resume and (path / key).exists()):
+                        url = data[key].get("url")
+                        if url:
+                            self._do_fetch(url, path, "file", is_url_absolute=True, filename=key)
+                            data[f"{key}_filename"] = data.get("upload_name") or data.get("name")
 
     def _ensure_user_fks(self, resource_name, definition, parents, path, data) -> None:
         """
@@ -865,6 +918,7 @@ class TransferHandler:
                 progress_length = len(resource_index)
 
             self.__set_progress_length(parents, progress_length)
+            response = None
 
             for stub in resource_index:
                 try:
@@ -873,7 +927,7 @@ class TransferHandler:
                     preprocessor(resource_name, definition, parents, path, stub)
                     response = handler(path, url, resource_name, stub, **kwargs)
                     postprocessor(resource_name, definition, parents, path, response)
-                except BaseException as err:
+                except Exception as err:
                     self.__handle_error(err, {
                         "message": f"An error occurred while pushing {resource_name}",
                         "resource_name": resource_name,
@@ -881,7 +935,7 @@ class TransferHandler:
                         "resource": stub
                     })
 
-                if "children" in definition:
+                if response and "children" in definition:
                     for child_name, child_structure in definition["children"].items():
                         new_parents = parents.copy()
                         new_parents[resource_name] = response
@@ -1004,6 +1058,9 @@ class TransferHandler:
         files = [f for f in path.iterdir() if f.is_file() and f.name != data_file_name]
         file_data = [{f"{f.name}_file": open(f, "rb")} for f in files]
 
+        if self.resume and data.get("target_record_key"):
+            return data
+
         if len(file_data):
             data["files"] = {}
             for f_dict in file_data:
@@ -1023,6 +1080,9 @@ class TransferHandler:
         """
         metadata_file = path / "file.json"
         metadata = self.__load_file_data(metadata_file)
+
+        if self.resume and metadata.get("target_record_key"):
+            return metadata
 
         parent_key = metadata.get("parent_source_record_key")
         if parent_key:
@@ -1165,6 +1225,15 @@ class TransferHandler:
         if resource_stub: ret = ret / resource_stub["uuid"]
         return ret
 
+    def __set_cursor(self, parents: dict, resource_name: str) -> None:
+        self.write_to_meta_file({
+            "cursor": {
+                "stage": self.current_stage(),
+                "parents": parents,
+                "resource_name": resource_name
+            }
+        })
+
     # Progress
 
     def __update_progress(self, action: str, resource_name: str,
@@ -1306,7 +1375,9 @@ class TransferHandler:
     @staticmethod
     def __load_file_data(path):
         with open(path) as file:
-            return json.loads(file.read())
+            content = file.read()
+            if content:
+                return json.loads(content)
 
         return None
 
@@ -1340,7 +1411,7 @@ class TransferHandler:
         if isinstance(error, AbortError):
             raise error
 
-        user_action = self.progress.report_error(error, context)
+        user_action = self.progress.report_error(error, (self.error_context or {}) | context)
 
         if user_action == "abort":
             raise AbortError("User aborted operation")
