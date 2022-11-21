@@ -195,7 +195,7 @@ class TransferHandler:
         self.error_context = None
         self.resume = resume
         if not dry_run: self.initialize_data_directory()
-        if self.progress.log_debug: self.initialize_debug_log()
+        if self.progress.needs_log_file: self.initialize_debug_log()
         assert self.metadata
         assert self.uuid
 

@@ -18,3 +18,6 @@ class NullProgressReporter(AbstractProgressReporter):
 
     def _close_progress_bar(self) -> None:
         pass
+
+    def _get_error_response(self, *args) -> None:
+        pass

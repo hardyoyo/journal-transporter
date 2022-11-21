@@ -41,6 +41,7 @@ class AbstractProgressReporter(ABC):
 
     def __init__(self, interface: Any, init_message: str = None, start: int = 0, verbose: bool = False,
                  debug: bool = False, log: bool = False, **args) -> None:
+                 debug: bool = False, log: str = "n", on_error: str = "i", **args) -> None:
         """
         Initializes the progress reporter.
 
@@ -55,13 +56,18 @@ class AbstractProgressReporter(ABC):
                 If True, creates new progress counters for every journal. Else, one per operation.
             debug: bool, optional
                 If True, foregoes progress bars in favor of (very) verbose debug output.
+            log: str, optional
+                The log setting to use: n/none (default), e/error, or d/debug
             args: **kwargs
                 Arbitrary implementation-specific kwargs
         """
         self.interface = interface
         self.debug_mode = debug
         self.log_debug = log
+        self.log_debug = log in ["d", "debug"]
+        self.log_error = log in ["e", "error"]
         self.log_file = None
+        self.needs_log_file = self.log_debug or self.log_error
         self.verbose_mode = True
         self.progress = start
         self.message = init_message
@@ -124,7 +130,7 @@ class AbstractProgressReporter(ABC):
                 self._update_interface()
 
         if self.log_debug:
-            self._log_debug(debug_message or message)
+            self.__log_debug(debug_message or message)
 
     def major(self, message: str = None, length: int = 100, debug_message: str = None) -> None:
         """
@@ -288,18 +294,42 @@ class AbstractProgressReporter(ABC):
             debug_text = f"{self._now()} -- {message}"
             self._print_message(debug_text)
 
-    def _log_debug(self, message):
+    def __log_debug(self, message) -> None:
         """
-        Writes to the debug log.
+        Writes a debug message to the log, if debug logging is on.
 
         Parameters:
             message: str
                 The message to be written.
         """
-        if self.log_debug and self.log_file and message:
-            debug_text = f"{self._now()} -- {message}"
+        if self.log_debug:
+            self.__write_to_log(message)
+
+    def __log_error(self, error: Exception, context: dict) -> None:
+        """
+        Writes an error message to the log, if error logging is on.
+
+        Parameters:
+            message: str
+                The message to be written
+        """
+        if self.log_error:
+            error_info = self.__error_info(error)
+            message = str(error_info) + "\n" + str(PrettyPrinter(indent=2).pprint(context))
+            self.__write_to_log(message)
+
+    def __write_to_log(self, message) -> None:
+        """
+        Writes a message to the log file.
+
+        Parameters:
+            message: str
+                The message to be written
+        """
+        if self.log_file and message:
+            text = f"{self._now()} -- {message}"
             with open(self.log_file, "a") as log:
-                log.write(debug_text + "\n")
+                log.write(text + "\n")
 
     @abstractmethod
     def _print_message(self, message: str, **kwargs) -> None:
@@ -328,3 +358,13 @@ class AbstractProgressReporter(ABC):
             return self.verbose
         elif update_type is ProgressUpdateType.DEBUG:
             return self.debug
+
+    def __error_info(self, error: Exception) -> str:
+        if isinstance(error, ServerResponseError):
+            return textwrap.dedent(
+                f"Server returned an error response:"
+                f"Status {error.response.status_code} - {error.response.reason}"
+                f"{error.response.text}"
+            )
+        else:
+            return error.args[0]

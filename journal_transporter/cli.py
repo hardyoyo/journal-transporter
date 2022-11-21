@@ -526,15 +526,19 @@ async def transfer(
         "--debug",
         help="Enable debug output"
     ),
-    log: Optional[bool] = typer.Option(
-        False,
+    log: Optional[str] = typer.Option(
+        "n",
         "--log",
-        help="Log debug output to file"
+        "-l",
+        help="Logging: [n] none (default), [e] errors only, [d] debug (can get very large)"
+    ),
     ),
     resume: Optional[bool] = typer.Option(
         False,
         "--resume",
-        help="Resume from where the last process ended, if applicable"
+        "-r",
+        help=("Resume from where the last process ended, if applicable. Journal Transporter will not submit requests"
+              "for any existing data.")
     ),
     force: Optional[bool] = typer.Option(
         False,
@@ -544,11 +548,7 @@ async def transfer(
     )
 ) -> None:
     """
-    Initiates a transfer of data from a source server to a target server.
-    Where the sausage gets made.
-    The real meal deal.
-    Where the deals get sausaged.
-    Sausage.
+    Initiates a transfer of data from a source server to the local machine, and/or from local to a target server.
     """
     errors = []
     source_def = config.get_server(source)
@@ -587,12 +587,11 @@ async def transfer(
         transfer_methods = ["fetch_indexes", "fetch_data", "push_data"]
 
     try:
-        # Verbose temporarily forced True - TODO: use verbose()
         progress_reporter = CliProgressReporter(typer,
                                                 init_message="Initializing...",
                                                 verbose=True,
                                                 debug=debug,
-                                                log=log
+                                                log=log,
                                                 )
         handler = TransferHandler(data_directory,
                                   source=source_def,
