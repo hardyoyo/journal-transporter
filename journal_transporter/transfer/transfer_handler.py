@@ -106,6 +106,9 @@ class TransferHandler:
                             }
                         },
                         "authors": {
+                            "foreign_keys": {
+                                "user": "users"
+                            },
                             "fetch": {
                                 "handler": "_extract_from_index"
                             }
