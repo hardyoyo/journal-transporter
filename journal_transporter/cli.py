@@ -532,6 +532,11 @@ async def transfer(
         "-l",
         help="Logging: [n] none (default), [e] errors only, [d] debug (can get very large)"
     ),
+    on_error: Optional[str] = typer.Option(
+        "i",
+        "--on-error",
+        "-e",
+        help="On error, do: [i] interactive mode (default), [c] continue, [a] abort"
     ),
     resume: Optional[bool] = typer.Option(
         False,
@@ -592,6 +597,7 @@ async def transfer(
                                                 verbose=True,
                                                 debug=debug,
                                                 log=log,
+                                                on_error=on_error
                                                 )
         handler = TransferHandler(data_directory,
                                   source=source_def,

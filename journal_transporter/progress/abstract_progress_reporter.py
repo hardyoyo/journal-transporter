@@ -31,16 +31,16 @@ There is also the DEBUG type, which does not display progress bars, but instead 
 from abc import ABC, abstractmethod
 from typing import Any
 from datetime import datetime
-from pathlib import Path
+from pprint import PrettyPrinter
+import textwrap
 
-import journal_transporter.database as database
 from journal_transporter.progress.progress_update_type import ProgressUpdateType
+from journal_transporter.transfer.exceptions import ServerResponseError
 
 
 class AbstractProgressReporter(ABC):
 
     def __init__(self, interface: Any, init_message: str = None, start: int = 0, verbose: bool = False,
-                 debug: bool = False, log: bool = False, **args) -> None:
                  debug: bool = False, log: str = "n", on_error: str = "i", **args) -> None:
         """
         Initializes the progress reporter.
@@ -58,16 +58,18 @@ class AbstractProgressReporter(ABC):
                 If True, foregoes progress bars in favor of (very) verbose debug output.
             log: str, optional
                 The log setting to use: n/none (default), e/error, or d/debug
+            on_error: str, optional
+                Error handlign setting to use: i/interactive (default), c/continue, or a/abort
             args: **kwargs
                 Arbitrary implementation-specific kwargs
         """
         self.interface = interface
         self.debug_mode = debug
-        self.log_debug = log
         self.log_debug = log in ["d", "debug"]
         self.log_error = log in ["e", "error"]
         self.log_file = None
         self.needs_log_file = self.log_debug or self.log_error
+        self.on_error = on_error
         self.verbose_mode = True
         self.progress = start
         self.message = init_message
@@ -188,7 +190,47 @@ class AbstractProgressReporter(ABC):
         self.update(ProgressUpdateType.DEBUG, debug_message=message)
 
     def report_error(self, error: Exception, context: dict = {}) -> str:
-        return self._get_error_response(error, context)
+        """
+        Concrete wrapper for getting a user response to an error.
+
+        Paramters:
+            error: Exception
+                The error raised
+            context: dict
+                Error context to display
+
+        Returns:
+            str: The user response
+        """
+        if self.on_error in ["c", "continue"]:
+            response = "continue"
+        elif self.on_error in ["a", "abort"]:
+            response = "abort"
+        else:
+            response = self._get_error_response(error, context)
+
+        if self.log_error:
+            self.__log_error(error, context)
+
+        return response
+
+    @abstractmethod
+    def _get_error_response(error: Exception, context: dict) -> str:
+        """
+        Report an error to the UI for user input.
+
+        Must be implemented by subclass, as it's UI specific.
+
+        Paramters:
+            error: Exception
+                The error raised
+            context: dict
+                Error context to display
+
+        Returns:
+            str: The user response
+        """
+        pass
 
     def error(self, message: str, fatal: bool = False) -> None:
         """
