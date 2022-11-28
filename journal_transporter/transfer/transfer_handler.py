@@ -1071,7 +1071,9 @@ class TransferHandler:
 
         response = self._do_push(url, data)
 
-        if response:
+        # If response is 200 but no source_record_key, it means that the target plugin opted to not
+        # make a record. This is okay, just move along.
+        if response and response.get("source_record_key"):
             data["target_record_key"] = response.get("source_record_key")
             self._replace_file_contents(file, {key: data[key] for key in data if key != 'files'})
         return data
@@ -1098,7 +1100,10 @@ class TransferHandler:
         files = [f for f in path.iterdir() if f.is_file() and f.name != "file.json"]
         file = files[0]
         response = self._do_push(url, {"files": {"file": open(file, "rb")}, **metadata})
-        if response:
+
+        # If response is 200 but no source_record_key, it means that the target plugin opted to not
+        # make a record. This is okay, just move along.
+        if response and response.get("source_record_key"):
             metadata["target_record_key"] = response["source_record_key"]
             self._replace_file_contents(metadata_file, metadata)
 
