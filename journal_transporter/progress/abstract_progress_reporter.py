@@ -70,9 +70,10 @@ class AbstractProgressReporter(ABC):
         self.log_file = None
         self.needs_log_file = self.log_debug or self.log_error
         self.on_error = on_error
-        self.verbose_mode = True
+        self.verbose_mode = verbose
         self.progress = start
         self.message = init_message
+        self.progress_length = 100
         self.setup()
 
     def setup(self, **args):
@@ -113,22 +114,36 @@ class AbstractProgressReporter(ABC):
                 else:
                     # If not verbose, create a progress bar that will span the entire operation.
                     self.subtask_length = None
+                    self.message = message
+                    self.progress_length = length
                     self._new_progress_bar(length, message, progress)
             elif update_type is ProgressUpdateType.MINOR:
                 if self.verbose_mode:
                     # If verbose, create a progress bar for this suboperation.
+                    self.progress_length = length
+                    self.message = message
                     self._new_progress_bar(length, before_message=message)
                 else:
                     # If not verbose, update the major progress bar progress and label.
                     self.subtask_length = length
-                    if progress: self.set_progress(progress)
-                    if message: self.set_message(message)
+                    if progress:
+                        self.set_progress(progress)
+                    if message:
+                        self.message = message
+                        self.set_message(message)
                     self._update_interface()
             elif update_type is ProgressUpdateType.DETAIL:
                 # Update progress. If verbose, also update the progress bar label.
-                weighted_progress = (progress / self.subtask_length) if hasattr(self, "subtask_length") else progress
-                if progress: self.set_progress(weighted_progress)
-                if message and self.verbose_mode: self.set_message(message)
+                if hasattr(self, "subtask_length") and self.subtask_length:
+                    weighted_progress = (progress / self.subtask_length)
+                else:
+                    weighted_progress = progress
+
+                if progress:
+                    self.set_progress(weighted_progress)
+                if message and self.verbose_mode:
+                    self.message = message
+                    self.set_message(message)
                 self._update_interface()
 
         if self.log_debug:
@@ -146,7 +161,7 @@ class AbstractProgressReporter(ABC):
             debug_message: str, optional
                 Debug message to display if in debug mode.
         """
-        self.update(ProgressUpdateType.MAJOR, message=message, debug_message=debug_message, length=length)
+        return self.update(ProgressUpdateType.MAJOR, message=message, debug_message=debug_message, length=length)
 
     def minor(self, progress: int = None, message: str = None, length: int = 100, debug_message: str = None) -> None:
         """
@@ -162,8 +177,8 @@ class AbstractProgressReporter(ABC):
             debug_message: str, optional
                 Debug message to display if in debug mode.
         """
-        self.update(ProgressUpdateType.MINOR, progress=progress, message=message, length=length,
-                    debug_message=debug_message)
+        return self.update(ProgressUpdateType.MINOR, progress=progress, message=message, length=length,
+                           debug_message=debug_message)
 
     def detail(self, progress: int = None, message: str = None, debug_message: str = None) -> None:
         """
@@ -177,7 +192,7 @@ class AbstractProgressReporter(ABC):
             debug_message: str, optional
                 Debug message to display if in debug mode.
         """
-        self.update(ProgressUpdateType.DETAIL, progress=progress, message=message, debug_message=debug_message)
+        return self.update(ProgressUpdateType.DETAIL, progress=progress, message=message, debug_message=debug_message)
 
     def debug(self, message: str) -> None:
         """
@@ -187,7 +202,7 @@ class AbstractProgressReporter(ABC):
             debug_message: str, optional
                 Debug message to display if in debug mode.
         """
-        self.update(ProgressUpdateType.DEBUG, debug_message=message)
+        return self.update(ProgressUpdateType.DEBUG, debug_message=message)
 
     def report_error(self, error: Exception, context: dict = {}) -> str:
         """

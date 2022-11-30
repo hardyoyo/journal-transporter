@@ -19,10 +19,13 @@ from journal_transporter import cli
 
 class CliProgressReporter(AbstractProgressReporter):
 
+    def setup(self) -> None:
+        self.progressbar = None
+
     def set_progress(self, new_total_progress: int) -> None:
         # Typer/Click takes progress updates as an amount to be added to current progress,
-        # not a total value. Therefore, we have to find find the difference between old and
-        # new progress to update the UI.
+        # not a total value. Before updating progress in order to maintain a total, first
+        # find the difference between old and new progress and save the value to be used in #_update_interface.
         self.progress_diff = new_total_progress - self.progress
         super().set_progress(new_total_progress)
 
@@ -48,8 +51,9 @@ class CliProgressReporter(AbstractProgressReporter):
         # Click version upgrades.
 
         # Exit existing bar, if it exists
-        self._close_progress_bar()
-        cli.write_line_break()
+        if self.progressbar:
+            self._close_progress_bar()
+            cli.write_line_break()
 
         self.set_progress(0)
         self.progress_diff = 0

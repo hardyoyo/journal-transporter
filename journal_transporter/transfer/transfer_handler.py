@@ -40,9 +40,10 @@ class TransferHandler:
     DEFAULT_FETCH_POSTPROCESSOR = "_default_fetch_postprocessor"
 
     # STRUCTURE
-    # A dict that defines the resources to be indexed, fetched, and pulled, and
-    # defines any custom behaviors required for each. Resources will be handled in the order
-    # defined here.
+    #
+    # Defines the resources to be indexed, fetched, and pulled.
+    # Defines any custom behaviors required for each.
+    # Resources will be handled in the order defined here.
     #
     # For each resource, define a key with the name of the resource. The value must be a dict
     # containing any (or none) of the following keys:
@@ -1296,7 +1297,7 @@ class TransferHandler:
         self.progress.detail(self.detail_progress, message)
 
     def __set_progress_length(self, parents, length):
-        if hasattr(self.progress, "progressbar") and len(parents) < 2:
+        if hasattr(self.progress, "progressbar") and self.progress.progressbar and len(parents) < 2:
             self.progress.progressbar.length = length
 
     def __get_structure_depth(self, structure: dict, current_depth: int = 0) -> int:
