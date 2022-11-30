@@ -3,8 +3,6 @@
 # All tests should only write files to the test/tmp directory,
 # which will be cleaned up automatically at the end of each test.
 
-import pytest
-
 from journal_transporter import cli
 from journal_transporter.progress.cli_progress_reporter import CliProgressReporter
 
