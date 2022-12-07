@@ -141,7 +141,8 @@ class TransferHandler:
                                     "foreign_keys": {
                                         "editor": "users",
                                         "reviewer": "users",
-                                        "review_file": "files",
+                                        "review_files": "files",
+                                        "reviewer_file": "files",
                                         "review_form": "review_forms"
                                     },
                                     "children": {
