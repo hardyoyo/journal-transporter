@@ -94,6 +94,7 @@ class TransferHandler:
                 "articles": {
                     "name_key": "title",
                     "foreign_keys": {
+                        "creator": "users",
                         "issues": "issues",
                         "sections": "sections"
                     },
