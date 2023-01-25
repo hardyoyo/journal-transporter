@@ -593,7 +593,7 @@ class TransferHandler:
                 })
 
             if response and "children" in definition:
-                progress_length = len(response) * len(definition.get("children"))
+                progress_length = len(response) * len(definition.get("children", []))
                 self.__set_progress_length(parents, progress_length)
                 for thing in response:
                     thing_path = path / thing["uuid"]
@@ -720,7 +720,7 @@ class TransferHandler:
                 self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
             else:
                 resource_stubs = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
-                children = definition.get("children")
+                children = definition.get("children", [])
                 progress_length = (len(resource_stubs) * (len(children) + 1)) if children else len(resource_stubs)
                 self.__set_progress_length(parents, progress_length)
 
@@ -918,10 +918,7 @@ class TransferHandler:
             postprocessor = self._get_postprocessor("push", config)
 
             resource_index = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
-            if definition.get("children"):
-                progress_length = len(resource_index) * (len(definition.get("children")))
-            else:
-                progress_length = len(resource_index)
+            progress_length = len(resource_index) * len(definition.get("children", []))
 
             self.__set_progress_length(parents, progress_length)
             response = None
