@@ -721,7 +721,7 @@ class TransferHandler:
             else:
                 resource_stubs = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
                 if not resource_stubs or not len(resource_stubs): return
-                
+
                 children = definition.get("children", {})
                 progress_length = (len(resource_stubs) * (len(children) + 1)) if children else len(resource_stubs)
                 self.__set_progress_length(parents, progress_length)
