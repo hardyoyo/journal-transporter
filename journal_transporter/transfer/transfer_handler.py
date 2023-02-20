@@ -720,7 +720,9 @@ class TransferHandler:
                 self.__increment_progress(parents, 1, f"Pushing {resource_name} complete!")
             else:
                 resource_stubs = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
-                children = definition.get("children", [])
+                if not resource_stubs or not len(resource_stubs): return
+                
+                children = definition.get("children", {})
                 progress_length = (len(resource_stubs) * (len(children) + 1)) if children else len(resource_stubs)
                 self.__set_progress_length(parents, progress_length)
 
@@ -742,7 +744,7 @@ class TransferHandler:
                         })
 
                     if response and "children" in definition:
-                        for child_name, child_structure in definition["children"].items():
+                        for child_name, child_structure in definition.get("children", {}).items():
                             new_parents = parents.copy()
                             new_parents[resource_name] = response
                             self._fetch({child_name: child_structure}, new_parents)
@@ -918,8 +920,9 @@ class TransferHandler:
             postprocessor = self._get_postprocessor("push", config)
 
             resource_index = self.__load_file_data(self._build_path(parents, resource_name) / "index.json")
-            progress_length = len(resource_index) * len(definition.get("children", []))
+            if not len(resource_index): return
 
+            progress_length = len(resource_index) * len(definition.get("children", {}))
             self.__set_progress_length(parents, progress_length)
             response = None
 
@@ -939,7 +942,7 @@ class TransferHandler:
                     })
 
                 if response and "children" in definition:
-                    for child_name, child_structure in definition["children"].items():
+                    for child_name, child_structure in definition.get("children", {}).items():
                         new_parents = parents.copy()
                         new_parents[resource_name] = response
                         self._push({child_name: child_structure}, new_parents)
@@ -1276,7 +1279,8 @@ class TransferHandler:
 
         if not progress_length:
             if structure.get("children"):
-                progress_length = sum([(c.get("progress_weight") or 1) for (k, c) in structure.get("children").items()])
+                progress_length = sum([(c.get("progress_weight") or 1)
+                                       for (k, c) in structure.get("children", {}).items()])
             else:
                 progress_length = 1
 
