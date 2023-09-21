@@ -147,6 +147,7 @@ class TransferHandler:
                                         "reviewer": "users",
                                         "review_files": "files",
                                         "reviewer_file": "files",
+                                        "supp_files": "files",
                                         "review_form": "review_forms"
                                     },
                                     "children": {
