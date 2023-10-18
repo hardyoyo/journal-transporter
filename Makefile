@@ -1,16 +1,13 @@
 # Makefile for Journal Migration
 
-.PHONY: stg-migration prd-migration dev-migration help
+.PHONY: stg-migration prd-migration dev-migration help all clean test
 
 help:
 	@echo "Usage:"
 	@echo "  make stg-migration journal=<journal_id>  - Run stg migration for a specific journal"
 	@echo "  make prd-migration journal=<journal_id>  - Run prd migration for a specific journal"
 	@echo "  make dev-migration journal=<journal_id>  - Run dev migration for a specific journal"
-	@echo ""
-	@echo "  Example:"
-	@echo "    make stg-migration journal=ucb_crp_bpj"
-	@echo ""
+	@echo "eg: make stg-migration journal=ucb_crp_bpj"
 
 migration-command = python -m journal_transporter transfer --source ojs-$(1) --target janeway-$(1) --journals $2 --log e --on-error c --force >> $2_$(1)_output.log
 
