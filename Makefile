@@ -17,7 +17,7 @@ migration-command = python -m journal_transporter transfer --source ojs-$(strip 
 start-message = echo "----> Start Time: $$(date)" >> $2_$(strip $(1))_output.log
 end-message = echo "----> End Time: $$(date)" >> $2_$(strip $(1))_output.log
 
-# run-migration: ensure necessary setup and check server reachability
+# run-migration: ensure necessary setup and check server reachability, then run migration
 #  Param 1: source environment (dev/stg/prd)
 #  Param 2: journal ID
 #  Param 3: target environment
@@ -32,8 +32,7 @@ define run-migration
         @if [ "$(strip $(1))" = "prd" ]; then \
             echo "🚀 If prompted for a password, it can be found on submit-prd:apache/htdocs/ojs/config.inc.php"; \
             echo "NOTE: it's safe to abort with ctrl-c at this point, and rerun make prd-migration when you have the password."; \
-			curl -u apiuser -Is https://pub-submit2-prd.escholarship.org/ojs/index.php/pages/jt/api/journals  | grep "200 OK" > /dev/null || (echo "Server not reachable." && exit 1); \
-
+            curl -u apiuser -Is https://pub-submit2-prd.escholarship.org/ojs/index.php/pages/jt/api/journals  | grep "200 OK" > /dev/null || (echo "Server not reachable." && exit 1); \
         else \
             curl -Is https://pub-submit2-$(strip $(1)).escholarship.org/ojs/index.php/pages/jt/api/journals | head -n 1 | grep "200 OK" > /dev/null || (echo "Server not reachable." && exit 1); \
         fi
