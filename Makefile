@@ -1,5 +1,6 @@
 # Makefile for Journal Migration
 
+.SILENT:
 .PHONY: stg-migration prd-migration dev-migration help test all clean
 
 help:
@@ -11,13 +12,15 @@ help:
 	@echo "  Example:"
 	@echo "    make dev-migration journal=ucb_crp_bpj"
 	@echo ""
+	@echo "  HINT: You can do a 'dry run' by using the -n flag for make."
+	@echo ""
 
 migration-command = python -m journal_transporter transfer --source ojs-$(strip $(1)) --target janeway-$(strip $(3)) --journals $2 --log e --on-error c --force >> $2_$(strip $(1))_output.log
 
 start-message = echo "----> Start Time: $$(date)" >> $2_$(strip $(1))_output.log
 end-message = echo "----> End Time: $$(date)" >> $2_$(strip $(1))_output.log
 
-# run-migration: ensure necessary setup and check server reachability, then run migration
+# run-migration: ensure necessary setup and check server reachability, then run the migration
 #  Param 1: source environment (dev/stg/prd)
 #  Param 2: journal ID
 #  Param 3: target environment
@@ -48,3 +51,4 @@ stg-migration:
 
 prd-migration:
 	$(call run-migration, prd, $(journal), prd) &
+
