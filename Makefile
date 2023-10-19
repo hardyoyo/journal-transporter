@@ -1,37 +1,30 @@
 # Makefile for Journal Migration
 
-.PHONY: stg-migration prd-migration dev-migration help all clean test
+.PHONY: stg-migration prd-migration dev-migration help watch status all clean test
 
 help:
 	@echo "Usage:"
 	@echo "  make stg-migration journal=<journal_id>  - Run stg migration for a specific journal"
 	@echo "  make prd-migration journal=<journal_id>  - Run prd migration for a specific journal"
 	@echo "  make dev-migration journal=<journal_id>  - Run dev migration for a specific journal"
-	@echo "eg: make stg-migration journal=ucb_crp_bpj"
+	@echo "  make watch  - Watch the log file for the currently running migration"
+	@echo "  make status  - Check the status of the currently running migration"
+	@echo ""
+	@echo "  Example:"
+	@echo "    make stg-migration journal=ucb_crp_bpj"
+	@echo "    make watch"
+	@echo ""
 
-migration-command = python -m journal_transporter transfer --source ojs-$(1) --target janeway-$(1) --journals $2 --log e --on-error c --force >> $2_$(1)_output.log
+define find_running_migration
+	$$(ps aux | grep "python -m journal_transporter transfer" | grep -v grep)
+endef
 
-start-message = echo "----> Start Time: $$(date)" >> $2_$(1)_output.log
-end-message = echo "----> End Time: $$(date)" >> $2_$(1)_output.log
+define extract_journal_from_migration
+	$$(echo $$1 | sed -nE 's/.*journal=([^ ]+).*/\1/p')
+endef
 
-# init-migration: ensure necessary setup and check server reachability
-#  Param 1: environment (dev/stg/prd)
-#  Param 2: command to execute
-define init-migration
-        # start a Pipenv shell if it is not already started
-	@if [ -z "$$(pipenv --venv)" ]; then \
-		echo "Starting Pipenv shell..."; \
-		pipenv shell; \
-	fi
-	# if the environment is prd, provide a helpful hint
-	@if [ "$(1)" = "prd" ]; then \
-		echo "🚀 If prompted for a password, it can be found on submit-prd:apache/htdocs/ojs/config.inc.php"; \
-		echo "NOTE: it's safe to abort with ctrl-c at this point, and rerun make prd-migration when you have the password."
-	fi
-	# check if the server is reachable
-	curl -Is https://pub-submit2-$(1).escholarship.org/ojs/index.php/pages/jt/api/journals | head -n 1 | grep "200 OK" > /dev/null || (echo "Server not reachable." && exit 1)
-	# now run whatever command was passed to this function, typically start-message
-	$2
+define find_log_file
+	$$(find . -name "$$1*_output.log" 2>/dev/null | head -n 1)
 endef
 
 dev-migration:
@@ -42,4 +35,37 @@ stg-migration:
 
 prd-migration:
 	$(call init-migration, prd, $(start-message) && $(migration-command, prd, $(journal)) && $(end-message))
+
+watch:
+	@running_migration=$$($(call find_running_migration)); \
+	if [ -n "$$running_migration" ]; then \
+		journal=$$($(call extract_journal_from_migration,$$running_migration)); \
+		log_file=$$($(call find_log_file,$$journal)); \
+		if [ -n "$$log_file" ]; then \
+			echo "Watching the log file $$log_file for the currently running migration..."; \
+			tail -f $$log_file; \
+		else \
+			echo "Migration log file not found."; \
+		fi; \
+	else \
+		echo "No active migration found."; \
+	fi
+
+status:
+	@running_migration=$$($(call find_running_migration)); \
+	if [ -n "$$running_migration" ]; then \
+		journal=$$($(call extract_journal_from_migration,$$running_migration)); \
+		log_file=$$($(call find_log_file,$$journal)); \
+		if [ -n "$$log_file" ]; then \
+			echo "Active migration found for journal: $$journal"; \
+			echo "Checking status for $$journal..."; \
+			echo "Migration is currently running."; \
+			echo "----> Started: $$(grep "Start Time" $$log_file | sed 's/^----> Start Time: //')"; \
+			echo "----> Elapsed Time: $$(date -u -d @$$(($(date -u +"%s") - $$(date -u -d @$$(grep "Start Time" $$log_file | sed 's/^----> Start Time: //')" +"%s")))) -u +%H:%M:%S"; \
+		else \
+			echo "Migration log file not found."; \
+		fi; \
+	else \
+		echo "No active migration found."; \
+	fi
 
