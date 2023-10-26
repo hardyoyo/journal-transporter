@@ -20,6 +20,10 @@ migration-command = python -m journal_transporter transfer --source ojs-$(strip 
 start-message = echo "----> Start Time: $$(date)" >> $2_$(strip $(1))_output.log
 end-message = echo "----> End Time: $$(date)" >> $2_$(strip $(1))_output.log
 
+clean:
+	@echo "Removing old log files..."
+	rm -f *.log
+
 # run-migration: ensure necessary setup and check server reachability, then run the migration
 #  Param 1: source environment (dev/stg/prd)
 #  Param 2: journal ID
